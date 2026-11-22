@@ -21,6 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aivideostudio.app.ui.AiGeneratorSection
+import com.aivideostudio.app.ui.ResearchScriptSection
+import com.aivideostudio.app.ui.loadWorkerUrl
+import com.aivideostudio.app.ui.saveWorkerUrl
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -114,7 +117,7 @@ private fun VideoStudioApp(context: Context) {
                     projects.firstOrNull { it.id == selectedProjectId } ?: projects.firstOrNull(),
                     { selectedTab = 1 }
                 )
-                Tab.SETTINGS -> SettingsScreen(projects.size)
+                Tab.SETTINGS -> SettingsScreen(context, projects.size)
             }
         }
     }
@@ -294,6 +297,12 @@ private fun EditorScreen(project: VideoProject?, onChooseProject: () -> Unit) {
         }
 
         if (project != null) {
+            ResearchScriptSection(
+                context = ctx,
+                projectId = project.id,
+                projectTitle = project.title,
+                projectType = project.type
+            )
             AiGeneratorSection(
                 context = ctx,
                 projectId = project.id,
@@ -308,7 +317,7 @@ private fun EditorScreen(project: VideoProject?, onChooseProject: () -> Unit) {
         EditorFeature("02", "Scene manager", "Atur visual, durasi, dan narasi tiap adegan", false)
         EditorFeature("03", "Audio & subtitle", "Kelola voice-over, musik, dan teks", false)
         EditorFeature("04", "Timeline & rendering", "Gabungkan seluruh elemen menjadi video MP4", false)
-        Text("Generator naskah & storyboard v0.3 aktif secara lokal per proyek; penyuntingan timeline lanjutan, audio/subtitle, AI cloud, dan rendering MP4 akan diaktifkan bertahap.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        Text("Riset & naskah v0.4 serta generator storyboard v0.3 tersimpan per proyek; koneksi provider AI cloud aktif setelah endpoint Worker dan secret server dikonfigurasi.", color = Muted, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -329,13 +338,16 @@ private fun EditorFeature(number: String, title: String, description: String, av
 }
 
 @Composable
-private fun SettingsScreen(projectCount: Int) {
+private fun SettingsScreen(context: Context, projectCount: Int) {
+    var workerUrl by remember { mutableStateOf(loadWorkerUrl(context)) }
+    var workerSavedMsg by remember { mutableStateOf("") }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SectionHeading("Pengaturan", "Atur preferensi studio produksi Anda")
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = SurfaceWhite)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("STATUS APLIKASI", color = Muted, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                SettingRow("Versi aplikasi", "0.2.0 (v0.3 generator)")
+                SettingRow("Versi aplikasi", "0.2.0 (v0.4 riset & naskah)")
                 HorizontalDivider(color = Color(0xFFEDEAF4))
                 SettingRow("Penyimpanan proyek", "Lokal perangkat")
                 HorizontalDivider(color = Color(0xFFEDEAF4))
@@ -344,11 +356,34 @@ private fun SettingsScreen(projectCount: Int) {
                 SettingRow("Sinkronisasi cloud", "Belum dikonfigurasi")
             }
         }
+        Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = SurfaceWhite)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("ENDPOINT CLOUDFLARE WORKER (OPSIONAL)", fontWeight = FontWeight.Bold, color = VioletDark)
+                Text("Masukkan URL base Worker Anda (tanpa API key). API key provider AI disimpan sebagai secret di server Cloudflare Worker.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = workerUrl,
+                    onValueChange = { workerUrl = it },
+                    label = { Text("URL Cloudflare Worker") },
+                    placeholder = { Text("https://ai-video-studio-api.<subdomain>.workers.dev") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(onClick = {
+                    saveWorkerUrl(context, workerUrl)
+                    workerSavedMsg = "URL Worker disimpan di perangkat."
+                }) {
+                    Text("Simpan URL Worker")
+                }
+                if (workerSavedMsg.isNotBlank()) {
+                    Text(workerSavedMsg, color = VioletDark, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Lavender)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("KONEKSI CLOUD", fontWeight = FontWeight.Bold, color = VioletDark)
                 Text("Supabase akan digunakan untuk akun, database proyek, dan sinkronisasi lintas perangkat. URL dan anon key akan dimasukkan setelah backend disiapkan.", color = Ink, style = MaterialTheme.typography.bodySmall)
-                Text("Keamanan: jangan pernah memasukkan service_role key ke aplikasi Android.", color = VioletDark, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                Text("Keamanan: jangan pernah memasukkan service_role key atau API key provider ke aplikasi Android.", color = VioletDark, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
             }
         }
         Text("AI Video Studio • Dibangun untuk produksi video dari ide hingga hasil akhir.", color = Muted, style = MaterialTheme.typography.bodySmall)

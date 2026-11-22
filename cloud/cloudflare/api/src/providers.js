@@ -1,0 +1,145 @@
+export const SUPPORTED_PROVIDERS = ["gemini", "groq", "openrouter"];
+
+const RESEARCH_SCRIPT_SYSTEM_PROMPT = `
+Anda adalah asisten riset dan penulis naskah video berbahasa Indonesia.
+Ikuti aturan berikut:
+1. Pisahkan fakta yang mapan, interpretasi, dan catatan verifikasi/ketidakpastian. Jangan mengarang kutipan atau tanggal palsu.
+2. Sertakan daftar sumber referensi yang relevan atau rujukan jenis sumber (arsip, jurnal, lembaga resmi, dokumentasi) secara jujur tanpa mengada-ada URL palsu.
+3. Susun naskah video dengan pembukaan (hook), isi per bagian, penutup, dan estimasi durasi sesuai gaya penulisan yang diminta.
+4. Kembalikan HANYA JSON valid dengan struktur:
+{
+  "summary": "string",
+  "keyPoints": ["string"],
+  "factChecks": [{"claim": "string", "status": "Perlu Verifikasi | Umum Dikenal | Catatan", "note": "string"}],
+  "references": [{"title": "string", "sourceType": "string", "note": "string"}],
+  "script": {
+    "opening": "string",
+    "body": "string",
+    "closing": "string",
+    "writingStyle": "string",
+    "revisionNote": "string",
+    "estimatedDurationSec": 60
+  }
+}
+`.trim();
+
+function buildUserPrompt(payload) {
+  return JSON.stringify({
+    topic: payload.topic,
+    videoType: payload.videoType,
+    language: payload.language || "Indonesia",
+    targetDurationSec: payload.targetDurationSec || 60,
+    writingStyle: payload.writingStyle || "Informatif & Jelas",
+    targetAudience: payload.targetAudience || "Umum",
+    revisionInstruction: payload.revisionInstruction || "",
+    currentDraft: payload.currentDraft || null
+  });
+}
+
+function extractJsonObject(rawText) {
+  if (!rawText || typeof rawText !== "string") return null;
+  const trimmed = rawText.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch (_) {
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start !== -1 && end !== -1 && end > start) {
+      try {
+        return JSON.parse(trimmed.slice(start, end + 1));
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+export async function runResearchAndScriptProvider(env, payload) {
+  const requested = (payload.provider || env.DEFAULT_AI_PROVIDER || "gemini").toLowerCase();
+
+  if (requested === "gemini" && env.GEMINI_API_KEY) {
+    const model = env.GEMINI_MODEL || "gemini-2.5-flash";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: RESEARCH_SCRIPT_SYSTEM_PROMPT }] },
+        contents: [{ role: "user", parts: [{ text: buildUserPrompt(payload) }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.4 }
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Gemini API error (${res.status}): ${errText.slice(0, 240)}`);
+    }
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const parsed = extractJsonObject(text);
+    return { providerUsed: `gemini (${model})`, rawText: text, parsed };
+  }
+
+  if (requested === "groq" && env.GROQ_API_KEY) {
+    const model = env.GROQ_MODEL || "llama-3.3-70b-versatile";
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${env.GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.4,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: RESEARCH_SCRIPT_SYSTEM_PROMPT },
+          { role: "user", content: buildUserPrompt(payload) }
+        ]
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Groq API error (${res.status}): ${errText.slice(0, 240)}`);
+    }
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content || "";
+    const parsed = extractJsonObject(text);
+    return { providerUsed: `groq (${model})`, rawText: text, parsed };
+  }
+
+  if (requested === "openrouter" && env.OPENROUTER_API_KEY) {
+    const model = env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free";
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://github.com/tokur07/ai-video-studio",
+        "X-Title": "AI Video Studio"
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.4,
+        messages: [
+          { role: "system", content: RESEARCH_SCRIPT_SYSTEM_PROMPT },
+          { role: "user", content: buildUserPrompt(payload) }
+        ]
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`OpenRouter API error (${res.status}): ${errText.slice(0, 240)}`);
+    }
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content || "";
+    const parsed = extractJsonObject(text);
+    return { providerUsed: `openrouter (${model})`, rawText: text, parsed };
+  }
+
+  return {
+    providerUsed: "none (server secret not configured)",
+    rawText: "",
+    parsed: null
+  };
+}

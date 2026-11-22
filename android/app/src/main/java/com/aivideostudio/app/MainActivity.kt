@@ -20,14 +20,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aivideostudio.app.ui.AiGeneratorSection
+import com.aivideostudio.app.ui.CloudSyncSection
+import com.aivideostudio.app.ui.RenderExportSection
 import com.aivideostudio.app.ui.ResearchScriptSection
 import com.aivideostudio.app.ui.StoryboardVisualSection
 import com.aivideostudio.app.ui.TimelineEditorSection
-import com.aivideostudio.app.ui.VoiceSubtitleSection
+import com.aivideostudio.app.ui.loadR2BucketInfo
+import com.aivideostudio.app.ui.loadRenderRunnerUrl
+import com.aivideostudio.app.ui.loadSupabaseAnonKey
+import com.aivideostudio.app.ui.loadSupabaseUrl
 import com.aivideostudio.app.ui.loadWorkerUrl
+import com.aivideostudio.app.ui.saveR2BucketInfo
+import com.aivideostudio.app.ui.saveRenderRunnerUrl
+import com.aivideostudio.app.ui.saveSupabaseAnonKey
+import com.aivideostudio.app.ui.saveSupabaseUrl
 import com.aivideostudio.app.ui.saveWorkerUrl
 import org.json.JSONArray
 import org.json.JSONObject
@@ -292,7 +302,7 @@ private fun ProjectsScreen(
                     }
                 }
             }
-            Text("Proyek tersimpan di perangkat ini. Sinkronisasi cloud Supabase akan diaktifkan setelah konfigurasi akun.", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Text("Proyek tersimpan di perangkat ini dan dapat disinkronkan ke Supabase bila konfigurasi cloud diisi.", color = Muted, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -352,14 +362,25 @@ private fun EditorScreen(
                 projectId = project.id,
                 projectTitle = project.title
             )
+            RenderExportSection(
+                context = ctx,
+                projectId = project.id,
+                projectTitle = project.title
+            )
+            CloudSyncSection(
+                context = ctx,
+                projectId = project.id,
+                projectTitle = project.title,
+                projectType = project.type,
+                projectMode = project.mode
+            )
         }
 
-        SectionHeading("Alur penyuntingan", "Fitur editor akan diaktifkan bertahap")
+        SectionHeading("Alur penyuntingan", "Modul produksi & integrasi cloud")
         EditorFeature("01", "Storyboard", "Susun urutan adegan dan alur cerita", true)
-        EditorFeature("02", "Scene manager", "Atur visual, durasi, dan narasi tiap adegan", true)
+        EditorFeature("02", "Scene manager", "Atur visual, prompt, impor gambar & generate AI", true)
         EditorFeature("03", "Audio & subtitle", "Kelola arahan suara dan sinkronisasi subtitle", true)
-        EditorFeature("04", "Timeline & rendering", "Susun timeline (v0.7); rendering MP4 (v0.8) & cloud penuh (v0.9) menyusul", true)
-        Text("Modul v0.6 (suara & subtitle) dan v0.7 (timeline editor) tersimpan per proyek; rendering MP4 via FFmpeg (v0.8) dan integrasi Supabase/R2 (v0.9) akan dikerjakan pada gelombang berikutnya.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        EditorFeature("04", "Timeline, render MP4 & cloud", "Timeline (v0.7), render FFmpeg (v0.8) & Supabase/R2 (v0.9) terhubung", true)
     }
 }
 
@@ -382,26 +403,31 @@ private fun EditorFeature(number: String, title: String, description: String, av
 @Composable
 private fun SettingsScreen(context: Context, projectCount: Int) {
     var workerUrl by remember { mutableStateOf(loadWorkerUrl(context)) }
-    var workerSavedMsg by remember { mutableStateOf("") }
+    var runnerUrl by remember { mutableStateOf(loadRenderRunnerUrl(context)) }
+    var supabaseUrl by remember { mutableStateOf(loadSupabaseUrl(context)) }
+    var supabaseAnonKey by remember { mutableStateOf(loadSupabaseAnonKey(context)) }
+    var r2BucketInfo by remember { mutableStateOf(loadR2BucketInfo(context)) }
+    var savedMsg by remember { mutableStateOf("") }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SectionHeading("Pengaturan", "Atur preferensi studio produksi Anda")
+        SectionHeading("Pengaturan", "Atur preferensi studio produksi & koneksi cloud Anda")
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = SurfaceWhite)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("STATUS APLIKASI", color = Muted, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                SettingRow("Versi aplikasi", "0.2.0 (v0.6–v0.7 suara, subtitle & timeline)")
+                SettingRow("Versi aplikasi", "0.2.0 (v0.8–v0.9 render & cloud)")
                 HorizontalDivider(color = Color(0xFFEDEAF4))
-                SettingRow("Penyimpanan proyek", "Lokal perangkat")
+                SettingRow("Penyimpanan proyek", "Lokal + Sinkronisasi Cloud")
                 HorizontalDivider(color = Color(0xFFEDEAF4))
                 SettingRow("Jumlah proyek", "$projectCount")
                 HorizontalDivider(color = Color(0xFFEDEAF4))
-                SettingRow("Sinkronisasi cloud", "Belum dikonfigurasi")
+                SettingRow("Konfigurasi Supabase", if (supabaseUrl.isNotBlank() && supabaseAnonKey.isNotBlank()) "Terkonfigurasi" else "Belum diisi")
             }
         }
+
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = SurfaceWhite)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("ENDPOINT CLOUDFLARE WORKER (OPSIONAL)", fontWeight = FontWeight.Bold, color = VioletDark)
-                Text("Masukkan URL base Worker Anda (tanpa API key). API key provider AI disimpan sebagai secret di server Cloudflare Worker.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text("ENDPOINT WORKER & RENDER RUNNER (OPSIONAL)", fontWeight = FontWeight.Bold, color = VioletDark)
+                Text("Isi URL Cloudflare Worker untuk riset/naskah/gambar AI dan URL runner FFmpeg terpisah untuk ekspor MP4 (jangan menaruh secret/API key di APK).", color = Muted, style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     value = workerUrl,
                     onValueChange = { workerUrl = it },
@@ -410,22 +436,70 @@ private fun SettingsScreen(context: Context, projectCount: Int) {
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = runnerUrl,
+                    onValueChange = { runnerUrl = it },
+                    label = { Text("URL FFmpeg Render Runner (v0.8)") },
+                    placeholder = { Text("https://renderer-anda.example.com") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Button(onClick = {
                     saveWorkerUrl(context, workerUrl)
-                    workerSavedMsg = "URL Worker disimpan di perangkat."
+                    saveRenderRunnerUrl(context, runnerUrl)
+                    savedMsg = "URL Worker & FFmpeg Render Runner disimpan."
                 }) {
-                    Text("Simpan URL Worker")
-                }
-                if (workerSavedMsg.isNotBlank()) {
-                    Text(workerSavedMsg, color = VioletDark, style = MaterialTheme.typography.bodySmall)
+                    Text("Simpan Endpoint")
                 }
             }
         }
+
+        Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = SurfaceWhite)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("SUPABASE & CLOUDFLARE R2 (V0.9)", fontWeight = FontWeight.Bold, color = VioletDark)
+                Text("Gunakan Supabase anon key (bukan service_role key) untuk autentikasi dan sinkronisasi database proyek.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = supabaseUrl,
+                    onValueChange = { supabaseUrl = it },
+                    label = { Text("Supabase Project URL") },
+                    placeholder = { Text("https://<project-ref>.supabase.co") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = supabaseAnonKey,
+                    onValueChange = { supabaseAnonKey = it },
+                    label = { Text("Supabase anon key") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = r2BucketInfo,
+                    onValueChange = { r2BucketInfo = it },
+                    label = { Text("Cloudflare R2 Bucket / Base Label") },
+                    placeholder = { Text("r2://ai-video-studio-assets") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(onClick = {
+                    saveSupabaseUrl(context, supabaseUrl)
+                    saveSupabaseAnonKey(context, supabaseAnonKey)
+                    saveR2BucketInfo(context, r2BucketInfo)
+                    savedMsg = "Konfigurasi Supabase & R2 disimpan di perangkat."
+                }) {
+                    Text("Simpan Cloud Config")
+                }
+                if (savedMsg.isNotBlank()) {
+                    Text(savedMsg, color = VioletDark, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Lavender)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("KONEKSI CLOUD", fontWeight = FontWeight.Bold, color = VioletDark)
-                Text("Supabase akan digunakan untuk akun, database proyek, dan sinkronisasi lintas perangkat. URL dan anon key akan dimasukkan setelah backend disiapkan.", color = Ink, style = MaterialTheme.typography.bodySmall)
-                Text("Keamanan: jangan pernah memasukkan service_role key atau API key provider ke aplikasi Android.", color = VioletDark, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                Text("KEAMANAN KREDENSIAL", fontWeight = FontWeight.Bold, color = VioletDark)
+                Text("Jangan pernah memasukkan Supabase service_role key atau API key provider AI ke dalam kode sumber maupun APK.", color = Ink, style = MaterialTheme.typography.bodySmall)
             }
         }
         Text("AI Video Studio • Dibangun untuk produksi video dari ide hingga hasil akhir.", color = Muted, style = MaterialTheme.typography.bodySmall)

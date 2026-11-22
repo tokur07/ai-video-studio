@@ -727,7 +727,7 @@ fun VoiceSubtitleSection(
                 style = androidx.compose.material3.MaterialTheme.typography.labelLarge
             )
             androidx.compose.foundation.layout.Row(
-                modifier = androidx.compose.ui.Modifier.androidx.compose.foundation.horizontalScroll(
+                modifier = androidx.compose.ui.Modifier.horizontalScroll(
                     androidx.compose.foundation.rememberScrollState()
                 ),
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
@@ -747,7 +747,7 @@ fun VoiceSubtitleSection(
                 style = androidx.compose.material3.MaterialTheme.typography.labelLarge
             )
             androidx.compose.foundation.layout.Row(
-                modifier = androidx.compose.ui.Modifier.androidx.compose.foundation.horizontalScroll(
+                modifier = androidx.compose.ui.Modifier.horizontalScroll(
                     androidx.compose.foundation.rememberScrollState()
                 ),
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)

@@ -29,6 +29,7 @@ import com.aivideostudio.app.ui.RenderExportSection
 import com.aivideostudio.app.ui.ResearchScriptSection
 import com.aivideostudio.app.ui.StoryboardVisualSection
 import com.aivideostudio.app.ui.TimelineEditorSection
+import com.aivideostudio.app.ui.VoiceSubtitleSection
 import com.aivideostudio.app.ui.loadR2BucketInfo
 import com.aivideostudio.app.ui.loadRenderRunnerUrl
 import com.aivideostudio.app.ui.loadSupabaseAnonKey

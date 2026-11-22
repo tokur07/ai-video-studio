@@ -3,7 +3,9 @@ package com.aivideostudio.app
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -22,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aivideostudio.app.ui.AiGeneratorSection
 import com.aivideostudio.app.ui.ResearchScriptSection
+import com.aivideostudio.app.ui.StoryboardVisualSection
 import com.aivideostudio.app.ui.loadWorkerUrl
 import com.aivideostudio.app.ui.saveWorkerUrl
 import org.json.JSONArray
@@ -63,6 +66,15 @@ private fun VideoStudioApp(context: Context) {
     var status by remember { mutableStateOf("Ide Anda siap diubah menjadi sebuah video.") }
     var projects by remember { mutableStateOf(loadProjects(context)) }
     var selectedProjectId by remember { mutableStateOf<Long?>(null) }
+    var pickedImageUri by remember { mutableStateOf<String?>(null) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            pickedImageUri = uri.toString()
+        }
+    }
 
     fun createProject() {
         if (topic.isBlank()) {
@@ -115,7 +127,10 @@ private fun VideoStudioApp(context: Context) {
                 }, { selectedTab = 0 })
                 Tab.EDITOR -> EditorScreen(
                     projects.firstOrNull { it.id == selectedProjectId } ?: projects.firstOrNull(),
-                    { selectedTab = 1 }
+                    { selectedTab = 1 },
+                    pickedImageUri = pickedImageUri,
+                    onClearPickedImage = { pickedImageUri = null },
+                    onRequestPickImage = { imagePickerLauncher.launch("image/*") }
                 )
                 Tab.SETTINGS -> SettingsScreen(context, projects.size)
             }
@@ -281,7 +296,13 @@ private fun ProjectsScreen(
 }
 
 @Composable
-private fun EditorScreen(project: VideoProject?, onChooseProject: () -> Unit) {
+private fun EditorScreen(
+    project: VideoProject?,
+    onChooseProject: () -> Unit,
+    pickedImageUri: String?,
+    onClearPickedImage: () -> Unit,
+    onRequestPickImage: (Int) -> Unit
+) {
     val ctx = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SectionHeading("Studio editor", "Ruang kerja untuk menyusun video Anda")
@@ -310,14 +331,23 @@ private fun EditorScreen(project: VideoProject?, onChooseProject: () -> Unit) {
                 projectType = project.type,
                 projectMode = project.mode
             )
+            StoryboardVisualSection(
+                context = ctx,
+                projectId = project.id,
+                projectTitle = project.title,
+                projectType = project.type,
+                pickedImageUri = pickedImageUri,
+                onClearPickedImage = onClearPickedImage,
+                onRequestPickImage = onRequestPickImage
+            )
         }
 
         SectionHeading("Alur penyuntingan", "Fitur editor akan diaktifkan bertahap")
         EditorFeature("01", "Storyboard", "Susun urutan adegan dan alur cerita", true)
-        EditorFeature("02", "Scene manager", "Atur visual, durasi, dan narasi tiap adegan", false)
+        EditorFeature("02", "Scene manager", "Atur visual, durasi, dan narasi tiap adegan", true)
         EditorFeature("03", "Audio & subtitle", "Kelola voice-over, musik, dan teks", false)
         EditorFeature("04", "Timeline & rendering", "Gabungkan seluruh elemen menjadi video MP4", false)
-        Text("Riset & naskah v0.4 serta generator storyboard v0.3 tersimpan per proyek; koneksi provider AI cloud aktif setelah endpoint Worker dan secret server dikonfigurasi.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        Text("Storyboard visual & impor aset v0.5 tersimpan per proyek; suara/subtitle (v0.6), timeline (v0.7), rendering MP4 (v0.8), dan cloud penuh (v0.9) akan diaktifkan bertahap.", color = Muted, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -347,7 +377,7 @@ private fun SettingsScreen(context: Context, projectCount: Int) {
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = SurfaceWhite)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("STATUS APLIKASI", color = Muted, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                SettingRow("Versi aplikasi", "0.2.0 (v0.4 riset & naskah)")
+                SettingRow("Versi aplikasi", "0.2.0 (v0.5 storyboard & visual)")
                 HorizontalDivider(color = Color(0xFFEDEAF4))
                 SettingRow("Penyimpanan proyek", "Lokal perangkat")
                 HorizontalDivider(color = Color(0xFFEDEAF4))

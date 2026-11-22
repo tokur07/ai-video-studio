@@ -1,0 +1,297 @@
+package com.aivideostudio.app.ui
+
+import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.aivideostudio.app.model.SceneVisualAsset
+import com.aivideostudio.app.model.StoryboardVisualBundle
+import org.json.JSONArray
+import org.json.JSONObject
+
+private val VISUAL_STYLES = listOf(
+    "Fotorealistik & Sinematik",
+    "Ilustrasi Editorial",
+    "Dokumenter Arsip & Nyata",
+    "Animasi 2D Bersih"
+)
+
+private val VISUAL_RATIOS = listOf("9:16", "16:9", "1:1")
+private val SHOT_TYPES = listOf("Wide Shot", "Medium Shot", "Close-Up", "Tracking Shot")
+
+private const val PREFS_NAME = "ai_video_studio"
+
+private fun loadVisualBundle(
+    context: Context,
+    projectId: Long,
+    fallbackTitle: String
+): StoryboardVisualBundle {
+    val defaultAssets = (1..4).map { idx ->
+        SceneVisualAsset(
+            sceneNumber = idx,
+            sceneTitle = "Adegan $idx: ${fallbackTitle.ifBlank { "Visual Utama" }}",
+            visualPrompt = "${fallbackTitle.ifBlank { "Visual video" }}, adegan $idx, komposisi jelas, pencahayaan alami",
+            aspectRatio = "9:16"
+        )
+    }
+    val fallback = StoryboardVisualBundle(
+        projectId = projectId,
+        assets = defaultAssets
+    )
+    return try {
+        val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("v05_visual_$projectId", null) ?: return fallback
+        val root = JSONObject(raw)
+        val arr = root.optJSONArray("assets") ?: JSONArray()
+        val parsedAssets = (0 until arr.length()).map { idx ->
+            val o = arr.optJSONObject(idx) ?: JSONObject()
+            SceneVisualAsset(
+                sceneNumber = o.optInt("sceneNumber", idx + 1),
+                sceneTitle = o.optString("sceneTitle", "Adegan ${idx + 1}"),
+                visualPrompt = o.optString("visualPrompt", ""),
+                negativePrompt = o.optString("negativePrompt", "teks acak, watermark, buram"),
+                cameraShot = o.optString("cameraShot", "Medium Shot"),
+                aspectRatio = o.optString("aspectRatio", root.optString("aspectRatio", "9:16")),
+                localImageUri = o.optString("localImageUri", ""),
+                assetSourceLabel = o.optString("assetSourceLabel", "Prompt Siap Pakai (Belum Ada Gambar)")
+            )
+        }
+        StoryboardVisualBundle(
+            projectId = projectId,
+            aspectRatio = root.optString("aspectRatio", "9:16"),
+            visualStyle = root.optString("visualStyle", "Fotorealistik & Sinematik"),
+            assets = if (parsedAssets.isNotEmpty()) parsedAssets else defaultAssets,
+            updatedAt = root.optLong("updatedAt", System.currentTimeMillis())
+        )
+    } catch (_: Exception) {
+        fallback
+    }
+}
+
+private fun saveVisualBundle(context: Context, bundle: StoryboardVisualBundle) {
+    val arr = JSONArray().apply {
+        bundle.assets.forEach { a ->
+            put(JSONObject().apply {
+                put("sceneNumber", a.sceneNumber)
+                put("sceneTitle", a.sceneTitle)
+                put("visualPrompt", a.visualPrompt)
+                put("negativePrompt", a.negativePrompt)
+                put("cameraShot", a.cameraShot)
+                put("aspectRatio", a.aspectRatio)
+                put("localImageUri", a.localImageUri)
+                put("assetSourceLabel", a.assetSourceLabel)
+            })
+        }
+    }
+    val root = JSONObject().apply {
+        put("projectId", bundle.projectId)
+        put("aspectRatio", bundle.aspectRatio)
+        put("visualStyle", bundle.visualStyle)
+        put("assets", arr)
+        put("updatedAt", System.currentTimeMillis())
+    }
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit().putString("v05_visual_${bundle.projectId}", root.toString()).apply()
+}
+
+@Composable
+fun StoryboardVisualSection(
+    context: Context,
+    projectId: Long,
+    projectTitle: String,
+    projectType: String,
+    pickedImageUri: String?,
+    onClearPickedImage: () -> Unit,
+    onRequestPickImage: (Int) -> Unit
+) {
+    val initial = remember(projectId) {
+        loadVisualBundle(context, projectId, projectTitle)
+    }
+
+    var bundle by remember(projectId) { mutableStateOf(initial) }
+    var activePickScene by remember(projectId) { mutableStateOf<Int?>(null) }
+    var statusText by remember(projectId) {
+        mutableStateOf("Manajemen aset & visual prompt v0.5 siap untuk proyek #$projectId.")
+    }
+
+    LaunchedEffect(pickedImageUri, activePickScene) {
+        val targetScene = activePickScene
+        val uri = pickedImageUri
+        if (targetScene != null && !uri.isNullOrBlank()) {
+            val updatedAssets = bundle.assets.map { asset ->
+                if (asset.sceneNumber == targetScene) {
+                    asset.copy(
+                        localImageUri = uri,
+                        assetSourceLabel = "Gambar Diimpor dari Perangkat"
+                    )
+                } else {
+                    asset
+                }
+            }
+            val updated = bundle.copy(assets = updatedAssets, updatedAt = System.currentTimeMillis())
+            bundle = updated
+            saveVisualBundle(context, updated)
+            statusText = "Gambar adegan #$targetScene berhasil diimpor dan disimpan."
+            activePickScene = null
+            onClearPickedImage()
+        }
+    }
+
+    fun rebuildPromptsFromTopic() {
+        val topicClean = projectTitle.trim().ifEmpty { "Topik Video" }
+        val rebuilt = bundle.assets.mapIndexed { index, item ->
+            val shot = SHOT_TYPES[index % SHOT_TYPES.size]
+            val prompt = "$topicClean, ${item.sceneTitle}, $shot, gaya ${bundle.visualStyle.lowercase()}, format $projectType, rasio ${bundle.aspectRatio}, pencahayaan konsisten, tanpa teks tertanam"
+            item.copy(
+                cameraShot = shot,
+                aspectRatio = bundle.aspectRatio,
+                visualPrompt = prompt
+            )
+        }
+        val updated = bundle.copy(assets = rebuilt, updatedAt = System.currentTimeMillis())
+        bundle = updated
+        saveVisualBundle(context, updated)
+        statusText = "Prompt visual seluruh adegan diperbarui (${bundle.visualStyle}, ${bundle.aspectRatio})."
+    }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                "STORYBOARD VISUAL & ASET ADEGAN (V0.5)",
+                color = Color(0xFF7356D8),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Kelola prompt visual konsisten & impor gambar lokal per adegan (image generation cloud akan terhubung saat endpoint/provider gambar aktif).",
+                color = Color(0xFF77738A),
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Text("Gaya visual", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                for (style in VISUAL_STYLES) {
+                    FilterChip(
+                        selected = bundle.visualStyle == style,
+                        onClick = { bundle = bundle.copy(visualStyle = style) },
+                        label = { Text(style, maxLines = 1) }
+                    )
+                }
+            }
+
+            Text("Rasio aspek visual", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (ratio in VISUAL_RATIOS) {
+                    FilterChip(
+                        selected = bundle.aspectRatio == ratio,
+                        onClick = { bundle = bundle.copy(aspectRatio = ratio) },
+                        label = { Text(ratio) }
+                    )
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { rebuildPromptsFromTopic() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Susun Prompt Adegan")
+                }
+                OutlinedButton(
+                    onClick = {
+                        saveVisualBundle(context, bundle)
+                        statusText = "Aset & prompt visual v0.5 disimpan ke proyek #$projectId."
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Simpan Aset")
+                }
+            }
+
+            Text(statusText, color = Color(0xFF543BB2), style = MaterialTheme.typography.bodySmall)
+
+            for ((idx, asset) in bundle.assets.withIndex()) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF1EDFF).copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "Adegan ${asset.sceneNumber} • ${asset.assetSourceLabel}",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        OutlinedTextField(
+                            value = asset.sceneTitle,
+                            onValueChange = { newTitle ->
+                                val next = bundle.assets.mapIndexed { i, it ->
+                                    if (i == idx) it.copy(sceneTitle = newTitle) else it
+                                }
+                                bundle = bundle.copy(assets = next)
+                            },
+                            label = { Text("Judul adegan") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = asset.visualPrompt,
+                            onValueChange = { newPrompt ->
+                                val next = bundle.assets.mapIndexed { i, it ->
+                                    if (i == idx) it.copy(visualPrompt = newPrompt) else it
+                                }
+                                bundle = bundle.copy(assets = next)
+                            },
+                            label = { Text("Visual prompt") },
+                            minLines = 2,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = asset.negativePrompt,
+                            onValueChange = { newNeg ->
+                                val next = bundle.assets.mapIndexed { i, it ->
+                                    if (i == idx) it.copy(negativePrompt = newNeg) else it
+                                }
+                                bundle = bundle.copy(assets = next)
+                            },
+                            label = { Text("Negative prompt") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (asset.localImageUri.isNotBlank()) {
+                            Text(
+                                "Aset terpasang: ${asset.localImageUri}",
+                                color = Color(0xFF247B5B),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                activePickScene = asset.sceneNumber
+                                onRequestPickImage(asset.sceneNumber)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Impor Gambar Adegan ${asset.sceneNumber}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

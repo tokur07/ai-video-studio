@@ -40,6 +40,8 @@ Aturan wajib:
 
 function buildUserPrompt(payload) {
   return JSON.stringify({
+    task: payload.task || "research_script",
+    script: payload.script || null,
     topic: payload.topic,
     videoType: payload.videoType,
     language: payload.language || "Indonesia",
@@ -71,6 +73,9 @@ function extractJsonObject(rawText) {
 }
 
 export async function runResearchAndScriptProvider(env, payload) {
+  const systemPrompt = payload.task === "storyboard"
+    ? STORYBOARD_SYSTEM_PROMPT
+    : RESEARCH_SCRIPT_SYSTEM_PROMPT;
   const requested = (payload.provider || env.DEFAULT_AI_PROVIDER || "gemini").toLowerCase();
 
   if (requested === "gemini" && env.GEMINI_API_KEY) {
@@ -137,7 +142,7 @@ export async function runResearchAndScriptProvider(env, payload) {
         model,
         temperature: 0.4,
         messages: [
-          { role: "system", content: RESEARCH_SCRIPT_SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           { role: "user", content: buildUserPrompt(payload) }
         ]
       })

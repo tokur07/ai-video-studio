@@ -126,6 +126,7 @@ fun StoryboardVisualSection(
     var bundle by remember(projectId) { mutableStateOf(initial) }
     var activePickScene by remember(projectId) { mutableStateOf<Int?>(null) }
     var generatingSceneNum by remember(projectId) { mutableStateOf<Int?>(null) }
+    var isGeneratingStoryboard by remember(projectId) { mutableStateOf(false) }
     var statusText by remember(projectId) {
         mutableStateOf("Manajemen aset, visual prompt & generate gambar AI siap untuk proyek #$projectId.")
     }
@@ -168,6 +169,58 @@ fun StoryboardVisualSection(
         bundle = updated
         saveVisualBundle(context, updated)
         statusText = "Prompt visual seluruh adegan diperbarui (${bundle.visualStyle}, ${bundle.aspectRatio})."
+    }
+
+    fun generateStoryboardFromScript() {
+        val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("v04_research_$projectId", null)
+        if (raw.isNullOrBlank()) {
+            statusText = "Naskah belum ditemukan. Buka bagian Riset & Naskah, susun naskah terlebih dahulu, lalu coba lagi."
+            return
+        }
+        val script = runCatching { JSONObject(raw) }.getOrNull()
+        if (script == null) {
+            statusText = "Data naskah tidak dapat dibaca. Simpan ulang naskah lalu coba lagi."
+            return
+        }
+        val opening = script.optString("opening", "").trim()
+        val body = script.optString("body", "").trim()
+        val closing = script.optString("closing", "").trim()
+        if (opening.isBlank() && body.isBlank() && closing.isBlank()) {
+            statusText = "Naskah masih kosong. Isi pembukaan, isi naskah, dan penutup terlebih dahulu."
+            return
+        }
+
+        isGeneratingStoryboard = true
+        statusText = "AI sedang membaca naskah dan menyusun empat adegan yang berbeda..."
+        WorkerVisualClient.generateStoryboardAsync(
+            workerBaseUrl = loadWorkerUrl(context),
+            topic = script.optString("topic", projectTitle).ifBlank { projectTitle },
+            videoType = script.optString("videoType", projectType),
+            opening = opening,
+            body = body,
+            closing = closing,
+            visualStyle = bundle.visualStyle,
+            aspectRatio = bundle.aspectRatio
+        ) { result ->
+            isGeneratingStoryboard = false
+            statusText = result.message + if (result.providerLabel.isNotBlank()) " (${result.providerLabel})" else ""
+            if (result.success) {
+                val freshAssets = result.scenes.map { scene ->
+                    scene.copy(
+                        localImageUri = "",
+                        assetSourceLabel = "Prompt AI dari Naskah"
+                    )
+                }
+                val updated = bundle.copy(
+                    assets = freshAssets,
+                    updatedAt = System.currentTimeMillis()
+                )
+                bundle = updated
+                saveVisualBundle(context, updated)
+                statusText = "Empat adegan berhasil disusun dari naskah. Generate gambar tiap adegan untuk membuat visualnya."
+            }
+        }
     }
 
     fun triggerAiImageGeneration(asset: SceneVisualAsset) {
@@ -259,12 +312,21 @@ fun StoryboardVisualSection(
                 }
             }
 
+            Button(
+                onClick = { generateStoryboardFromScript() },
+                enabled = !isGeneratingStoryboard && generatingSceneNum == null,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isGeneratingStoryboard) "Menganalisis Naskah..." else "Buat 4 Adegan dari Naskah")
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
+                OutlinedButton(
                     onClick = { rebuildPromptsFromTopic() },
+                    enabled = !isGeneratingStoryboard && generatingSceneNum == null,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Susun Prompt Adegan")
+                    Text("Prompt Cepat")
                 }
                 OutlinedButton(
                     onClick = {
@@ -367,7 +429,7 @@ fun StoryboardVisualSection(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             Button(
                                 onClick = { triggerAiImageGeneration(asset) },
-                                enabled = generatingSceneNum == null,
+                                enabled = generatingSceneNum == null && !isGeneratingStoryboard,
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(if (isThisGenerating) "Membuat..." else "Generate Gambar AI")

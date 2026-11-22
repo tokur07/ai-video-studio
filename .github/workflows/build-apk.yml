@@ -29,7 +29,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
-          cache-disabled: true
+          cache-disabled: false
       - name: Decode signing keystore from secret
         if: env.ANDROID_KEYSTORE_BASE64 != ''
         env:
@@ -43,7 +43,15 @@ jobs:
           ORG_GRADLE_PROJECT_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ORG_GRADLE_PROJECT_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ORG_GRADLE_PROJECT_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: gradle --no-daemon --rerun-tasks assembleDebug
+        run: |
+          for attempt in 1 2 3; do
+            if gradle --no-daemon assembleDebug; then
+              exit 0
+            fi
+            echo "Build attempt $attempt failed, waiting 15s before retry..."
+            sleep 15
+          done
+          exit 1
       - name: Remove temporary keystore file
         if: always()
         run: rm -f android/keystore.jks

@@ -64,6 +64,7 @@ private fun loadVisualBundle(
                 sceneNumber = o.optInt("sceneNumber", idx + 1),
                 sceneTitle = o.optString("sceneTitle", "Adegan ${idx + 1}"),
                 visualPrompt = o.optString("visualPrompt", ""),
+                sceneSummary = o.optString("sceneSummary", ""),
                 negativePrompt = o.optString("negativePrompt", "teks acak, watermark, buram"),
                 cameraShot = o.optString("cameraShot", "Medium Shot"),
                 aspectRatio = o.optString("aspectRatio", root.optString("aspectRatio", "9:16")),
@@ -90,6 +91,7 @@ private fun saveVisualBundle(context: Context, bundle: StoryboardVisualBundle) {
                 put("sceneNumber", a.sceneNumber)
                 put("sceneTitle", a.sceneTitle)
                 put("visualPrompt", a.visualPrompt)
+                put("sceneSummary", a.sceneSummary)
                 put("negativePrompt", a.negativePrompt)
                 put("cameraShot", a.cameraShot)
                 put("aspectRatio", a.aspectRatio)
@@ -368,6 +370,13 @@ fun StoryboardVisualSection(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        if (asset.sceneSummary.isNotBlank()) {
+                            Text(
+                                "Bagian naskah: ${asset.sceneSummary}",
+                                color = Color(0xFF543BB2),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                         OutlinedTextField(
                             value = asset.visualPrompt,
                             onValueChange = { newPrompt ->

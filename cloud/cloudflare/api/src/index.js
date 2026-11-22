@@ -68,6 +68,49 @@ export default {
           { status: 500 }
         );
       }
+    } else if (url.pathname === "/v1/generate-storyboard" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const topic = (body?.topic || "").toString().trim();
+        const script = body?.script || {};
+        const opening = (script.opening || "").toString().trim();
+        const bodyText = (script.body || "").toString().trim();
+        const closing = (script.closing || "").toString().trim();
+        if (!topic || !(opening || bodyText || closing)) {
+          response = Response.json(
+            { ok: false, error: "Topik dan naskah (opening/body/closing) wajib diisi." },
+            { status: 400 }
+          );
+        } else {
+          const result = await runResearchAndScriptProvider(env, {
+            task: "storyboard",
+            topic,
+            videoType: body?.videoType || "Video",
+            language: "Indonesia",
+            writingStyle: body?.visualStyle || "Fotorealistik & Sinematik",
+            targetAudience: body?.targetAudience || "Umum",
+            targetDurationSec: Number(body?.targetDurationSec) || 60,
+            script: { opening, body: bodyText, closing },
+            currentDraft: null
+          });
+          const scenes = Array.isArray(result.parsed?.scenes) ? result.parsed.scenes : [];
+          const validScenes = scenes.filter((scene) =>
+            scene && Number(scene.sceneNumber) >= 1 && Number(scene.sceneNumber) <= 4 &&
+            String(scene.visualPrompt || "").trim()
+          ).slice(0, 4);
+          response = Response.json({
+            ok: true,
+            providerUsed: result.providerUsed,
+            hasLiveStoryboard: validScenes.length === 4,
+            scenes: validScenes
+          });
+        }
+      } catch (err) {
+        response = Response.json(
+          { ok: false, error: err?.message || "Gagal menyusun storyboard dari naskah." },
+          { status: 500 }
+        );
+      }
     } else if (url.pathname === "/v1/generate-image" && request.method === "POST") {
       try {
         const body = await request.json();

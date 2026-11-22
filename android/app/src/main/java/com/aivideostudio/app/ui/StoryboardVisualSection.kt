@@ -1,8 +1,11 @@
 package com.aivideostudio.app.ui
 
 import android.util.Log
+import android.graphics.BitmapFactory
+import android.net.Uri
 
 import android.content.Context
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,6 +14,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aivideostudio.app.model.SceneVisualAsset
@@ -229,7 +234,11 @@ fun StoryboardVisualSection(
                 for (style in VISUAL_STYLES) {
                     FilterChip(
                         selected = bundle.visualStyle == style,
-                        onClick = { bundle = bundle.copy(visualStyle = style) },
+                        onClick = {
+                            val updated = bundle.copy(visualStyle = style, updatedAt = System.currentTimeMillis())
+                            bundle = updated
+                            saveVisualBundle(context, updated)
+                        },
                         label = { Text(style, maxLines = 1) }
                     )
                 }
@@ -240,7 +249,11 @@ fun StoryboardVisualSection(
                 for (ratio in VISUAL_RATIOS) {
                     FilterChip(
                         selected = bundle.aspectRatio == ratio,
-                        onClick = { bundle = bundle.copy(aspectRatio = ratio) },
+                        onClick = {
+                            val updated = bundle.copy(aspectRatio = ratio, updatedAt = System.currentTimeMillis())
+                            bundle = updated
+                            saveVisualBundle(context, updated)
+                        },
                         label = { Text(ratio) }
                     )
                 }
@@ -285,7 +298,9 @@ fun StoryboardVisualSection(
                                 val next = bundle.assets.mapIndexed { i, it ->
                                     if (i == idx) it.copy(sceneTitle = newTitle) else it
                                 }
-                                bundle = bundle.copy(assets = next)
+                                val updated = bundle.copy(assets = next, updatedAt = System.currentTimeMillis())
+                                bundle = updated
+                                saveVisualBundle(context, updated)
                             },
                             label = { Text("Judul adegan") },
                             singleLine = true,
@@ -297,7 +312,9 @@ fun StoryboardVisualSection(
                                 val next = bundle.assets.mapIndexed { i, it ->
                                     if (i == idx) it.copy(visualPrompt = newPrompt) else it
                                 }
-                                bundle = bundle.copy(assets = next)
+                                val updated = bundle.copy(assets = next, updatedAt = System.currentTimeMillis())
+                                bundle = updated
+                                saveVisualBundle(context, updated)
                             },
                             label = { Text("Visual prompt") },
                             minLines = 2,
@@ -309,18 +326,43 @@ fun StoryboardVisualSection(
                                 val next = bundle.assets.mapIndexed { i, it ->
                                     if (i == idx) it.copy(negativePrompt = newNeg) else it
                                 }
-                                bundle = bundle.copy(assets = next)
+                                val updated = bundle.copy(assets = next, updatedAt = System.currentTimeMillis())
+                                bundle = updated
+                                saveVisualBundle(context, updated)
                             },
                             label = { Text("Negative prompt") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         if (asset.localImageUri.isNotBlank()) {
-                            Text(
-                                "Aset terpasang: ${asset.localImageUri}",
-                                color = Color(0xFF247B5B),
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                            val previewBitmap = remember(asset.localImageUri) {
+                                runCatching {
+                                    context.contentResolver.openInputStream(Uri.parse(asset.localImageUri))?.use {
+                                        BitmapFactory.decodeStream(it)
+                                    }
+                                }.getOrNull()
+                            }
+                            if (previewBitmap != null) {
+                                Image(
+                                    bitmap = previewBitmap.asImageBitmap(),
+                                    contentDescription = "Gambar adegan ${asset.sceneNumber}",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(220.dp)
+                                )
+                                Text(
+                                    asset.assetSourceLabel,
+                                    color = Color(0xFF247B5B),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            } else {
+                                Text(
+                                    "File gambar tercatat tetapi tidak dapat dibuka. Silakan impor atau generate ulang gambar.",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             Button(

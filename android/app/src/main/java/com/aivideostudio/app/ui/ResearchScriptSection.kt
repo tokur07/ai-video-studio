@@ -217,7 +217,7 @@ fun ResearchScriptSection(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                WRITING_STYLES.forEach { style ->
+                for (style in WRITING_STYLES) {
                     FilterChip(
                         selected = state.writingStyle == style,
                         onClick = { state = state.copy(writingStyle = style) },
@@ -263,14 +263,14 @@ fun ResearchScriptSection(
 
             if (state.keyPoints.isNotEmpty()) {
                 Text("Poin Utama", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                state.keyPoints.forEach { pt ->
+                for (pt in state.keyPoints) {
                     Text("• $pt", style = MaterialTheme.typography.bodySmall)
                 }
             }
 
             if (state.factChecks.isNotEmpty()) {
                 Text("Catatan Verifikasi Fakta", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                state.factChecks.forEach { fc ->
+                for (fc in state.factChecks) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -288,7 +288,7 @@ fun ResearchScriptSection(
 
             if (state.references.isNotEmpty()) {
                 Text("Sumber Referensi", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                state.references.forEach { ref ->
+                for (ref in state.references) {
                     Text("• ${ref.title} (${ref.sourceType}) — ${ref.note}", style = MaterialTheme.typography.bodySmall)
                 }
             }

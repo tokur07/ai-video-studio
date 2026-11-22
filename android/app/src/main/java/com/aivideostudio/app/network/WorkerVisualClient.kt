@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import android.util.Log
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
@@ -85,6 +86,7 @@ object WorkerVisualClient {
                     com.aivideostudio.app.model.SceneVisualAsset(
                         sceneNumber = number,
                         sceneTitle = item.optString("sceneTitle", "Adegan $number").trim(),
+                        sceneSummary = item.optString("sceneSummary", "").trim(),
                         visualPrompt = prompt,
                         negativePrompt = item.optString(
                             "negativePrompt",

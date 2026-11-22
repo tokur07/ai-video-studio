@@ -39,7 +39,7 @@ object WorkerResearchClient {
                 val conn = (endpoint.openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     connectTimeout = 12000
-                    readTimeout = 20000
+                    readTimeout = 45000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 }

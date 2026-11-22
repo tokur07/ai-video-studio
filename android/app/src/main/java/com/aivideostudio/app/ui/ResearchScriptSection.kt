@@ -30,8 +30,9 @@ private const val PREFS_NAME = "ai_video_studio"
 private const val KEY_WORKER_URL = "worker_api_url"
 
 fun loadWorkerUrl(context: Context): String {
-    return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .getString(KEY_WORKER_URL, "") ?: ""
+    val saved = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getString(KEY_WORKER_URL, "")?.trim().orEmpty()
+    return saved.ifEmpty { "https://ai-video-studio-proxy.tonnykurniawan26.workers.dev" }
 }
 
 fun saveWorkerUrl(context: Context, url: String) {

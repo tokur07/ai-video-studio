@@ -21,10 +21,97 @@ data class SceneImageGenResult(
     val message: String = ""
 )
 
+data class StoryboardPromptResult(
+    val success: Boolean,
+    val providerLabel: String = "",
+    val scenes: List<com.aivideostudio.app.model.SceneVisualAsset> = emptyList(),
+    val message: String = ""
+)
+
 object WorkerVisualClient {
 
     private const val TAG = "AIVideoDiag"
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    fun generateStoryboardAsync(
+        workerBaseUrl: String,
+        topic: String,
+        videoType: String,
+        opening: String,
+        body: String,
+        closing: String,
+        visualStyle: String,
+        aspectRatio: String,
+        onResult: (StoryboardPromptResult) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val cleanUrl = workerBaseUrl.trim().trimEnd('/')
+                require(cleanUrl.isNotEmpty()) { "URL Cloudflare Worker belum diisi di menu Setelan." }
+                val endpoint = URL("$cleanUrl/v1/generate-storyboard")
+                val conn = (endpoint.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 15000
+                    readTimeout = 90000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                }
+                val payload = JSONObject().apply {
+                    put("topic", topic)
+                    put("videoType", videoType)
+                    put("visualStyle", visualStyle)
+                    put("aspectRatio", aspectRatio)
+                    put("script", JSONObject().apply {
+                        put("opening", opening)
+                        put("body", body)
+                        put("closing", closing)
+                    })
+                }
+                OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload.toString()) }
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val raw = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
+                conn.disconnect()
+                val root = JSONObject(raw)
+                if (code !in 200..299 || !root.optBoolean("ok", false)) {
+                    throw IllegalStateException(root.optString("error", "Server storyboard gagal (HTTP $code)."))
+                }
+                val arr = root.optJSONArray("scenes") ?: JSONArray()
+                val scenes = (0 until arr.length()).mapNotNull { index ->
+                    val item = arr.optJSONObject(index) ?: return@mapNotNull null
+                    val number = item.optInt("sceneNumber", index + 1)
+                    val prompt = item.optString("visualPrompt", "").trim()
+                    if (number !in 1..4 || prompt.isBlank()) return@mapNotNull null
+                    com.aivideostudio.app.model.SceneVisualAsset(
+                        sceneNumber = number,
+                        sceneTitle = item.optString("sceneTitle", "Adegan $number").trim(),
+                        visualPrompt = prompt,
+                        negativePrompt = item.optString(
+                            "negativePrompt",
+                            "text, subtitles, logo, watermark, blurry, distorted anatomy"
+                        ).trim(),
+                        aspectRatio = aspectRatio,
+                        assetSourceLabel = "Prompt AI dari Naskah"
+                    )
+                }.sortedBy { it.sceneNumber }
+                if (scenes.size != 4 || scenes.map { it.sceneNumber }.toSet().size != 4) {
+                    throw IllegalStateException("AI tidak menghasilkan empat adegan lengkap. Coba susun storyboard sekali lagi.")
+                }
+                StoryboardPromptResult(
+                    success = true,
+                    providerLabel = root.optString("providerUsed", "AI Cloud"),
+                    scenes = scenes,
+                    message = "Empat prompt storyboard berhasil dibuat berdasarkan naskah."
+                )
+            } catch (e: Exception) {
+                StoryboardPromptResult(
+                    success = false,
+                    message = e.message ?: "Gagal menyusun storyboard dari naskah."
+                )
+            }
+            mainHandler.post { onResult(result) }
+        }.start()
+    }
 
     fun generateSceneImageAsync(
         context: Context,

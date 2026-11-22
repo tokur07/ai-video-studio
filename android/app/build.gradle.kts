@@ -4,6 +4,15 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val storeFileProp = providers.gradleProperty("STORE_FILE").orNull
+val storePasswordProp = providers.gradleProperty("STORE_PASSWORD").orNull
+val keyAliasProp = providers.gradleProperty("KEY_ALIAS").orNull
+val keyPasswordProp = providers.gradleProperty("KEY_PASSWORD").orNull
+val hasCustomSigning = !storeFileProp.isNullOrBlank() &&
+    !storePasswordProp.isNullOrBlank() &&
+    !keyAliasProp.isNullOrBlank() &&
+    !keyPasswordProp.isNullOrBlank()
+
 android {
     namespace = "com.aivideostudio.app"
     compileSdk = 35
@@ -16,10 +25,24 @@ android {
         versionName = "0.2.0"
     }
 
+    signingConfigs {
+        if (hasCustomSigning) {
+            create("persistentDebug") {
+                storeFile = file(storeFileProp!!)
+                storePassword = storePasswordProp
+                keyAlias = keyAliasProp
+                keyPassword = keyPasswordProp
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            if (hasCustomSigning) {
+                signingConfig = signingConfigs.getByName("persistentDebug")
+            }
         }
         release {
             isMinifyEnabled = false

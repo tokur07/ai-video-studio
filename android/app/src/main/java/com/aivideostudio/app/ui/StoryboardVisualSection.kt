@@ -164,6 +164,7 @@ fun StoryboardVisualSection(
     }
 
     fun triggerAiImageGeneration(asset: SceneVisualAsset) {
+        Log.d("AIVideoDiag", "triggerAiImageGeneration scene=${asset.sceneNumber} promptBlank=${asset.visualPrompt.isBlank()} len=${asset.visualPrompt.length}")
         if (asset.visualPrompt.isBlank()) {
             statusText = "Isi visual prompt adegan #${asset.sceneNumber} terlebih dahulu."
             return

@@ -23,6 +23,21 @@ Ikuti aturan berikut:
 }
 `.trim();
 
+const STORYBOARD_SYSTEM_PROMPT = `
+Anda adalah sutradara visual dan storyboard artist profesional untuk video.
+Tugas: ubah naskah lengkap menjadi tepat 4 adegan visual yang berurutan dan benar-benar menggambarkan kejadian dalam naskah.
+Aturan wajib:
+1. Baca opening, body, dan closing sebagai satu cerita; jangan hanya mengulang topik.
+2. Setiap adegan harus menangkap momen/aksi spesifik yang memang disebut atau secara langsung tersirat dalam naskah.
+3. Keempat adegan harus berbeda, tidak boleh empat variasi gambar generik tentang topik yang sama.
+4. Jangan menambahkan tokoh, lokasi, peristiwa, benda penting, atau periode sejarah yang tidak didukung naskah.
+5. Untuk tiap adegan berikan sceneNumber 1-4, sceneTitle ringkas, sceneSummary yang menjelaskan bagian naskah yang divisualkan, visualPrompt sangat konkret dalam bahasa Inggris agar model gambar memahami subjek, aksi, latar, periode, komposisi dan pencahayaan, serta negativePrompt.
+6. Jaga konsistensi tokoh utama, pakaian, lokasi, periode waktu, dan gaya visual di semua adegan bila relevan.
+7. Jangan memasukkan tulisan, subtitle, logo, watermark, atau teks dalam gambar.
+8. Kembalikan HANYA JSON valid dengan bentuk:
+{"scenes":[{"sceneNumber":1,"sceneTitle":"...","sceneSummary":"...","visualPrompt":"...","negativePrompt":"..."}]}
+`.trim();
+
 function buildUserPrompt(payload) {
   return JSON.stringify({
     topic: payload.topic,
@@ -65,7 +80,7 @@ export async function runResearchAndScriptProvider(env, payload) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: RESEARCH_SCRIPT_SYSTEM_PROMPT }] },
+        systemInstruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: buildUserPrompt(payload) }] }],
         generationConfig: { responseMimeType: "application/json", temperature: 0.4 }
       })
@@ -93,7 +108,7 @@ export async function runResearchAndScriptProvider(env, payload) {
         temperature: 0.4,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: RESEARCH_SCRIPT_SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           { role: "user", content: buildUserPrompt(payload) }
         ]
       })

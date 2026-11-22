@@ -16,9 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aivideostudio.app.ui.AiGeneratorSection
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -141,62 +143,60 @@ private fun HomeScreen(
     mode: String, onModeChange: (String) -> Unit, status: String, projectCount: Int,
     onCreate: () -> Unit, onOpenProjects: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("IDE JADI KARYA", color = Color(0xFFC9BDFD), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                Text("Ceritakan ide.\nBiarkan kreativitas bekerja.", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Studio video AI untuk dokumenter, edukasi, promosi, dan cerita.", color = Color(0xFFD7D3E6))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AssistChip(onClick = onOpenProjects, label = { Text("$projectCount proyek tersimpan") }, leadingIcon = { Text("▤") })
-                    Spacer(Modifier.weight(1f))
-                    Text("VERSI 0.2", color = Color(0xFFC9BDFD), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+    val types = listOf("Dokumenter", "Video Shorts", "Promosi & Iklan", "Edukasi & Tutorial", "Storytelling", "Video Informatif", "Video Presentasi")
+    val modes = listOf("Otomatis", "Manual", "Hybrid")
+
+    SectionHeading("Mulai proyek baru", "Masukkan ide atau topik lalu pilih format dan mode produksi")
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            OutlinedTextField(
+                value = topic, onValueChange = onTopicChange,
+                label = { Text("Topik atau ide video") },
+                placeholder = { Text("Contoh: Kisah kereta api pertama di Jawa") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text("Jenis produksi", fontWeight = FontWeight.SemiBold, color = Ink)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                types.take(3).forEach { item ->
+                    FilterChip(selected = type == item, onClick = { onTypeChange(item) }, label = { Text(item, maxLines = 1, overflow = TextOverflow.Ellipsis) })
                 }
             }
-        }
-        SectionHeading("Mulai proyek baru", "Ubah ide sederhana menjadi konsep video")
-        Card(
-            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                OutlinedTextField(
-                    value = topic, onValueChange = onTopicChange, modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Topik atau ide video") },
-                    placeholder = { Text("Contoh: Sejarah kerajaan Majapahit") },
-                    minLines = 3, shape = RoundedCornerShape(16.dp)
-                )
-                Text("PILIH FORMAT VIDEO", style = MaterialTheme.typography.labelMedium, color = Muted, fontWeight = FontWeight.Bold)
-                listOf("Dokumenter", "Shorts", "Promosi", "Edukasi", "Storytelling").chunked(3).forEach { rowItems ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        rowItems.forEach { item ->
-                            FilterChip(selected = type == item, onClick = { onTypeChange(item) },
-                                label = { Text(item, maxLines = 1, overflow = TextOverflow.Ellipsis) }, modifier = Modifier.weight(1f))
-                        }
-                        repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
-                    }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                types.drop(3).take(2).forEach { item ->
+                    FilterChip(selected = type == item, onClick = { onTypeChange(item) }, label = { Text(item, maxLines = 1, overflow = TextOverflow.Ellipsis) })
                 }
-                Text("GAYA PRODUKSI", style = MaterialTheme.typography.labelMedium, color = Muted, fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Otomatis", "Manual").forEach { item ->
-                        FilterChip(selected = mode == item, onClick = { onModeChange(item) },
-                            label = { Text(if (item == "Otomatis") "✦  Otomatis" else "☷  Manual") },
-                            modifier = Modifier.weight(1f))
-                    }
-                }
-                Button(onClick = onCreate, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(16.dp)) {
-                    Text("Buat proyek", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(8.dp)); Text("→", style = MaterialTheme.typography.titleLarge)
-                }
-                Text(status, color = VioletDark, style = MaterialTheme.typography.bodySmall)
             }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                types.drop(5).forEach { item ->
+                    FilterChip(selected = type == item, onClick = { onTypeChange(item) }, label = { Text(item, maxLines = 1, overflow = TextOverflow.Ellipsis) })
+                }
+            }
+            Text("Mode produksi", fontWeight = FontWeight.SemiBold, color = Ink)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                modes.forEach { m ->
+                    FilterChip(selected = mode == m, onClick = { onModeChange(m) }, label = { Text(m) })
+                }
+            }
+            Button(onClick = onCreate, modifier = Modifier.fillMaxWidth()) {
+                Text("Buat proyek")
+            }
+            Text(status, color = VioletDark, style = MaterialTheme.typography.bodySmall)
         }
-        SectionHeading("Studio produksi", "Pilih alur yang sesuai kebutuhan")
-        StudioTile("▣", "Documentary Studio", "Sejarah, sains, tokoh, dan investigasi", Color(0xFFEDE8FF))
-        StudioTile("▶", "Short Video Studio", "Video vertikal untuk Shorts dan Reels", Color(0xFFFFEDE8))
-        StudioTile("✧", "Marketing Studio", "Iklan, promosi, dan presentasi produk", Color(0xFFE5F7F0))
-        StudioTile("▤", "Educational Studio", "Materi belajar, tutorial, dan penjelasan", Color(0xFFE8F1FF))
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        SectionHeading("Studio cepat", "Akses alur kerja utama")
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = onOpenProjects) { Text("Lihat ($projectCount)") }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        StudioTile("▶", "Shorts & Reels Studio", "Konten vertikal cepat dan hook tajam", Lavender)
+        StudioTile("✎", "Edukasi & Tutorial", "Panduan langkah demi langkah yang terstruktur", Mint)
         StudioTile("♡", "Storytelling Studio", "Cerita pendek dan narasi sinematik", Color(0xFFFFF2D9))
     }
 }
@@ -279,6 +279,7 @@ private fun ProjectsScreen(
 
 @Composable
 private fun EditorScreen(project: VideoProject?, onChooseProject: () -> Unit) {
+    val ctx = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SectionHeading("Studio editor", "Ruang kerja untuk menyusun video Anda")
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Ink), modifier = Modifier.fillMaxWidth()) {
@@ -291,12 +292,23 @@ private fun EditorScreen(project: VideoProject?, onChooseProject: () -> Unit) {
                 }
             }
         }
+
+        if (project != null) {
+            AiGeneratorSection(
+                context = ctx,
+                projectId = project.id,
+                projectTitle = project.title,
+                projectType = project.type,
+                projectMode = project.mode
+            )
+        }
+
         SectionHeading("Alur penyuntingan", "Fitur editor akan diaktifkan bertahap")
         EditorFeature("01", "Storyboard", "Susun urutan adegan dan alur cerita", true)
         EditorFeature("02", "Scene manager", "Atur visual, durasi, dan narasi tiap adegan", false)
         EditorFeature("03", "Audio & subtitle", "Kelola voice-over, musik, dan teks", false)
         EditorFeature("04", "Timeline & rendering", "Gabungkan seluruh elemen menjadi video MP4", false)
-        Text("Halaman editor saat ini merupakan kerangka workspace; fitur penyuntingan dan rendering belum aktif.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        Text("Generator naskah & storyboard v0.3 aktif secara lokal per proyek; penyuntingan timeline lanjutan, audio/subtitle, AI cloud, dan rendering MP4 akan diaktifkan bertahap.", color = Muted, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -323,7 +335,7 @@ private fun SettingsScreen(projectCount: Int) {
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = SurfaceWhite)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("STATUS APLIKASI", color = Muted, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                SettingRow("Versi aplikasi", "0.2.0")
+                SettingRow("Versi aplikasi", "0.2.0 (v0.3 generator)")
                 HorizontalDivider(color = Color(0xFFEDEAF4))
                 SettingRow("Penyimpanan proyek", "Lokal perangkat")
                 HorizontalDivider(color = Color(0xFFEDEAF4))

@@ -10,32 +10,6 @@ Starter Android APK + cloud-first backend. Proyek ini disiapkan agar dapat dikel
 - Enam AI Skills modular.
 - Renderer slideshow FFmpeg minimal.
 
-## Build APK dari Termux
-1. Ekstrak ZIP.
-2. Buka Termux:
-   ```bash
-   pkg update
-   pkg install git
-   termux-setup-storage
-   ```
-3. Masuk ke folder proyek, misalnya:
-   ```bash
-   cd ~/storage/downloads/ai-video-studio
-   ```
-4. Buat repository **Public** di GitHub bernama `ai-video-studio`.
-5. Jalankan:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial AI Video Studio"
-   git branch -M main
-   git remote add origin https://github.com/USERNAME/ai-video-studio.git
-   git push -u origin main
-   ```
-   Ganti `USERNAME` dengan username GitHub.
-6. Buka GitHub → Actions → workflow **Build Android APK**.
-7. Setelah berhasil, unduh artifact `AI-Video-Studio-debug-apk`. Di dalamnya ada `app-debug.apk`.
-
 ## Versi dan batasan
 Build memakai JDK 17, Gradle 8.11.1, Android Gradle Plugin 8.9.2, Kotlin 2.1.20, compileSdk 35.
 Versi 0.2 menyimpan draft proyek secara lokal di perangkat. Integrasi Supabase cloud, autentikasi, provider AI aktif, dan layanan rendering cloud belum diaktifkan. Kuota gratis provider dapat berubah. API key tidak boleh ditanam di APK.

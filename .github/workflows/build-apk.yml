@@ -1,9 +1,8 @@
 name: Build Android APK
-
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
 
 permissions:
   contents: read
@@ -14,31 +13,39 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: |
             platform-tools
-
       - name: Install SDK packages
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
-
+      - name: Decode signing keystore from secret
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/keystore.jks
       - name: Build debug APK
         working-directory: android
+        env:
+          ORG_GRADLE_PROJECT_STORE_FILE: keystore.jks
+          ORG_GRADLE_PROJECT_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: gradle --no-daemon assembleDebug
-
+      - name: Remove temporary keystore file
+        if: always()
+        run: rm -f android/keystore.jks
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

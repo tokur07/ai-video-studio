@@ -1,7 +1,6 @@
 package com.aivideostudio.app.ui
 
 import android.content.Context
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aivideostudio.app.model.SceneVisualAsset
 import com.aivideostudio.app.model.StoryboardVisualBundle
+import com.aivideostudio.app.network.WorkerVisualClient
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -118,8 +118,9 @@ fun StoryboardVisualSection(
 
     var bundle by remember(projectId) { mutableStateOf(initial) }
     var activePickScene by remember(projectId) { mutableStateOf<Int?>(null) }
+    var generatingSceneNum by remember(projectId) { mutableStateOf<Int?>(null) }
     var statusText by remember(projectId) {
-        mutableStateOf("Manajemen aset & visual prompt v0.5 siap untuk proyek #$projectId.")
+        mutableStateOf("Manajemen aset, visual prompt & generate gambar AI siap untuk proyek #$projectId.")
     }
 
     LaunchedEffect(pickedImageUri, activePickScene) {
@@ -162,6 +163,43 @@ fun StoryboardVisualSection(
         statusText = "Prompt visual seluruh adegan diperbarui (${bundle.visualStyle}, ${bundle.aspectRatio})."
     }
 
+    fun triggerAiImageGeneration(asset: SceneVisualAsset) {
+        if (asset.visualPrompt.isBlank()) {
+            statusText = "Isi visual prompt adegan #${asset.sceneNumber} terlebih dahulu."
+            return
+        }
+        generatingSceneNum = asset.sceneNumber
+        statusText = "Menghasilkan gambar AI untuk adegan #${asset.sceneNumber}..."
+        val workerUrl = loadWorkerUrl(context)
+        WorkerVisualClient.generateSceneImageAsync(
+            context = context,
+            workerBaseUrl = workerUrl,
+            projectId = projectId,
+            sceneNumber = asset.sceneNumber,
+            visualPrompt = asset.visualPrompt,
+            negativePrompt = asset.negativePrompt,
+            aspectRatio = bundle.aspectRatio
+        ) { res ->
+            generatingSceneNum = null
+            statusText = res.message
+            if (res.success && res.localUri.isNotBlank()) {
+                val updatedAssets = bundle.assets.map { item ->
+                    if (item.sceneNumber == asset.sceneNumber) {
+                        item.copy(
+                            localImageUri = res.localUri,
+                            assetSourceLabel = "Gambar AI (${res.providerLabel})"
+                        )
+                    } else {
+                        item
+                    }
+                }
+                val updated = bundle.copy(assets = updatedAssets, updatedAt = System.currentTimeMillis())
+                bundle = updated
+                saveVisualBundle(context, updated)
+            }
+        }
+    }
+
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -169,13 +207,13 @@ fun StoryboardVisualSection(
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
-                "STORYBOARD VISUAL & ASET ADEGAN (V0.5)",
+                "STORYBOARD VISUAL & ASET ADEGAN (V0.5+)",
                 color = Color(0xFF7356D8),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "Kelola prompt visual konsisten & impor gambar lokal per adegan (image generation cloud akan terhubung saat endpoint/provider gambar aktif).",
+                "Pilih salah satu atau gabungkan: Generate Gambar AI via Cloudflare Worker atau Impor Gambar dari penyimpanan internal perangkat.",
                 color = Color(0xFF77738A),
                 style = MaterialTheme.typography.bodySmall
             )
@@ -215,7 +253,7 @@ fun StoryboardVisualSection(
                 OutlinedButton(
                     onClick = {
                         saveVisualBundle(context, bundle)
-                        statusText = "Aset & prompt visual v0.5 disimpan ke proyek #$projectId."
+                        statusText = "Aset & prompt visual disimpan ke proyek #$projectId."
                     },
                     modifier = Modifier.weight(1f)
                 ) {
@@ -226,6 +264,7 @@ fun StoryboardVisualSection(
             Text(statusText, color = Color(0xFF543BB2), style = MaterialTheme.typography.bodySmall)
 
             for ((idx, asset) in bundle.assets.withIndex()) {
+                val isThisGenerating = generatingSceneNum == asset.sceneNumber
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF1EDFF).copy(alpha = 0.6f)),
@@ -280,14 +319,24 @@ fun StoryboardVisualSection(
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
-                        OutlinedButton(
-                            onClick = {
-                                activePickScene = asset.sceneNumber
-                                onRequestPickImage(asset.sceneNumber)
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Impor Gambar Adegan ${asset.sceneNumber}")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(
+                                onClick = { triggerAiImageGeneration(asset) },
+                                enabled = generatingSceneNum == null,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(if (isThisGenerating) "Membuat..." else "Generate Gambar AI")
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    activePickScene = asset.sceneNumber
+                                    onRequestPickImage(asset.sceneNumber)
+                                },
+                                enabled = generatingSceneNum == null,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Impor Gambar")
+                            }
                         }
                     }
                 }

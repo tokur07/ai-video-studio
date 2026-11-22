@@ -143,3 +143,78 @@ export async function runResearchAndScriptProvider(env, payload) {
     parsed: null
   };
 }
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+export async function runImageGeneratorProvider(env, payload) {
+  const prompt = (payload.visualPrompt || "").trim();
+  const negativePrompt = (payload.negativePrompt || "").trim();
+  const combinedPrompt = negativePrompt
+    ? `${prompt}. Avoid: ${negativePrompt}`
+    : prompt;
+
+  if (env.AI && typeof env.AI.run === "function") {
+    const model = env.CLOUDFLARE_IMAGE_MODEL || "@cf/black-forest-labs/flux-1-schnell";
+    const result = await env.AI.run(model, {
+      prompt: combinedPrompt,
+      steps: 4
+    });
+
+    if (result && typeof result.image === "string" && result.image.length > 0) {
+      return {
+        providerUsed: `cloudflare-ai (${model})`,
+        hasLiveImage: true,
+        mimeType: "image/jpeg",
+        imageBase64: result.image
+      };
+    }
+
+    if (result instanceof ReadableStream || result instanceof ArrayBuffer) {
+      const buf = result instanceof ArrayBuffer ? result : await new Response(result).arrayBuffer();
+      return {
+        providerUsed: `cloudflare-ai (${model})`,
+        hasLiveImage: true,
+        mimeType: "image/png",
+        imageBase64: arrayBufferToBase64(buf)
+      };
+    }
+  }
+
+  if (env.HF_TOKEN) {
+    const model = env.HF_IMAGE_MODEL || "black-forest-labs/FLUX.1-schnell";
+    const res = await fetch(`https://api-inference.huggingface.co/models/${encodeURIComponent(model)}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.HF_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ inputs: combinedPrompt })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`HuggingFace image error (${res.status}): ${errText.slice(0, 200)}`);
+    }
+    const buf = await res.arrayBuffer();
+    return {
+      providerUsed: `huggingface (${model})`,
+      hasLiveImage: true,
+      mimeType: "image/png",
+      imageBase64: arrayBufferToBase64(buf)
+    };
+  }
+
+  return {
+    providerUsed: "none (image provider binding/secret not configured)",
+    hasLiveImage: false,
+    mimeType: "",
+    imageBase64: ""
+  };
+}

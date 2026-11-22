@@ -1,4 +1,8 @@
-import { runResearchAndScriptProvider, SUPPORTED_PROVIDERS } from "./providers.js";
+import {
+  runResearchAndScriptProvider,
+  runImageGeneratorProvider,
+  SUPPORTED_PROVIDERS
+} from "./providers.js";
 
 export default {
   async fetch(request, env) {
@@ -24,8 +28,9 @@ export default {
       response = Response.json({
         ok: true,
         service: "ai-video-studio-api",
-        version: "0.4.0-starter",
-        configuredProviders
+        version: "0.5.0-visual-ready",
+        configuredProviders,
+        imageProviderReady: Boolean(env.AI || env.HF_TOKEN)
       });
     } else if (url.pathname === "/v1/research-script" && request.method === "POST") {
       try {
@@ -63,6 +68,35 @@ export default {
           { status: 500 }
         );
       }
+    } else if (url.pathname === "/v1/generate-image" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const visualPrompt = (body?.visualPrompt || "").toString().trim();
+        if (!visualPrompt) {
+          response = Response.json(
+            { ok: false, error: "Field 'visualPrompt' wajib diisi." },
+            { status: 400 }
+          );
+        } else {
+          const imgRes = await runImageGeneratorProvider(env, {
+            visualPrompt,
+            negativePrompt: body?.negativePrompt || "",
+            aspectRatio: body?.aspectRatio || "9:16"
+          });
+          response = Response.json({
+            ok: true,
+            providerUsed: imgRes.providerUsed,
+            hasLiveImage: imgRes.hasLiveImage,
+            mimeType: imgRes.mimeType,
+            imageBase64: imgRes.imageBase64
+          });
+        }
+      } catch (err) {
+        response = Response.json(
+          { ok: false, error: err?.message || "Gagal menghasilkan gambar AI." },
+          { status: 500 }
+        );
+      }
     } else {
       response = Response.json(
         { ok: false, error: "Route not implemented yet" },
@@ -75,41 +109,3 @@ export default {
     return new Response(response.body, { status: response.status, headers });
   }
 };
-
-
-cd ~/ai-video-studio && \
-mkdir -p android/app/src/main/java/com/aivideostudio/app/network && \
-cat <<'EOF' > android/app/src/main/java/com/aivideostudio/app/model/ResearchScriptModels.kt
-package com.aivideostudio.app.model
-
-data class FactCheckItem(
-    val claim: String,
-    val status: String,
-    val note: String
-)
-
-data class ReferenceItem(
-    val title: String,
-    val sourceType: String,
-    val note: String
-)
-
-data class ResearchScriptBundle(
-    val projectId: Long,
-    val topic: String = "",
-    val videoType: String = "Edukasi & Tutorial",
-    val writingStyle: String = "Informatif & Jelas",
-    val targetAudience: String = "Pemula / Umum",
-    val targetDurationSec: Int = 60,
-    val summary: String = "",
-    val keyPoints: List<String> = emptyList(),
-    val factChecks: List<FactCheckItem> = emptyList(),
-    val references: List<ReferenceItem> = emptyList(),
-    val opening: String = "",
-    val body: String = "",
-    val closing: String = "",
-    val revisionInstruction: String = "",
-    val providerLabel: String = "Mode Terstruktur Lokal (Belum Terhubung Cloud)",
-    val isLiveCloudResult: Boolean = false,
-    val updatedAt: Long = System.currentTimeMillis()
-)

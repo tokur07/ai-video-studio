@@ -8,7 +8,13 @@ val storeFileProp = providers.gradleProperty("STORE_FILE").orNull
 val storePasswordProp = providers.gradleProperty("STORE_PASSWORD").orNull
 val keyAliasProp = providers.gradleProperty("KEY_ALIAS").orNull
 val keyPasswordProp = providers.gradleProperty("KEY_PASSWORD").orNull
-val hasCustomSigning = !storeFileProp.isNullOrBlank() &&
+
+val resolvedKeystoreFile = storeFileProp
+    ?.takeIf { it.isNotBlank() }
+    ?.let { rootProject.file(it) }
+
+val hasValidSigning = resolvedKeystoreFile != null &&
+    resolvedKeystoreFile.exists() &&
     !storePasswordProp.isNullOrBlank() &&
     !keyAliasProp.isNullOrBlank() &&
     !keyPasswordProp.isNullOrBlank()
@@ -26,9 +32,9 @@ android {
     }
 
     signingConfigs {
-        if (hasCustomSigning) {
+        if (hasValidSigning) {
             create("persistentDebug") {
-                storeFile = file(storeFileProp!!)
+                storeFile = resolvedKeystoreFile
                 storePassword = storePasswordProp
                 keyAlias = keyAliasProp
                 keyPassword = keyPasswordProp
@@ -40,7 +46,7 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            if (hasCustomSigning) {
+            if (hasValidSigning) {
                 signingConfig = signingConfigs.getByName("persistentDebug")
             }
         }

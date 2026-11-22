@@ -16,7 +16,6 @@ import com.aivideostudio.app.model.FactCheckItem
 import com.aivideostudio.app.model.ReferenceItem
 import com.aivideostudio.app.model.ResearchScriptBundle
 import com.aivideostudio.app.network.WorkerResearchClient
-import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -153,7 +152,6 @@ fun ResearchScriptSection(
     projectTitle: String,
     projectType: String
 ) {
-    val scope = rememberCoroutineScope()
     val loaded = remember(projectId) {
         loadResearchBundle(context, projectId, projectTitle, projectType)
     }
@@ -173,11 +171,10 @@ fun ResearchScriptSection(
         isLoading = true
         statusText = "Memproses riset dan draf naskah..."
         val workerUrl = loadWorkerUrl(context)
-        scope.launch {
-            val updated = WorkerResearchClient.generateResearchAndScript(
-                workerBaseUrl = workerUrl,
-                current = state.copy(topic = cleanTopic)
-            )
+        WorkerResearchClient.generateResearchAndScriptAsync(
+            workerBaseUrl = workerUrl,
+            current = state.copy(topic = cleanTopic)
+        ) { updated ->
             state = updated
             saveResearchBundle(context, updated)
             isLoading = false
@@ -281,7 +278,7 @@ fun ResearchScriptSection(
                             .padding(10.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Text("[${fc.status}]${fc.claim}", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                        Text("[${fc.status}] ${fc.claim}", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
                         if (fc.note.isNotBlank()) {
                             Text(fc.note, color = Color(0xFF77738A), style = MaterialTheme.typography.bodySmall)
                         }
@@ -292,7 +289,7 @@ fun ResearchScriptSection(
             if (state.references.isNotEmpty()) {
                 Text("Sumber Referensi", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                 state.references.forEach { ref ->
-                    Text("• ${ref.title} (${ref.sourceType}) —${ref.note}", style = MaterialTheme.typography.bodySmall)
+                    Text("• ${ref.title} (${ref.sourceType}) — ${ref.note}", style = MaterialTheme.typography.bodySmall)
                 }
             }
 

@@ -36,7 +36,7 @@ private val TEMPO_OPTIONS = listOf(
     "Cepat (1.15x)"
 )
 
-private const val PREFS_NAME = "ai_video_studio"
+private const val VOICE_PREFS = "ai_video_studio"
 
 private fun loadVoiceSubtitleBundle(
     context: Context,
@@ -45,11 +45,11 @@ private fun loadVoiceSubtitleBundle(
 ): VoiceSubtitleBundle {
     val fallback = VoiceSubtitleBundle(projectId = projectId)
     return try {
-        val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = context.getSharedPreferences(VOICE_PREFS, Context.MODE_PRIVATE)
             .getString("v06_voice_sub_$projectId", null) ?: return fallback
         val root = JSONObject(raw)
         val arr = root.optJSONArray("cues") ?: JSONArray()
-        val cues = (0 until arr.length()).mapIndexed { idx, _ ->
+        val cues = (0 until arr.length()).map { idx ->
             val o = arr.optJSONObject(idx) ?: JSONObject()
             SubtitleCue(
                 sceneNumber = o.optInt("sceneNumber", idx + 1),
@@ -94,7 +94,7 @@ private fun saveVoiceSubtitleBundle(context: Context, bundle: VoiceSubtitleBundl
         put("cues", arr)
         put("updatedAt", System.currentTimeMillis())
     }
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    context.getSharedPreferences(VOICE_PREFS, Context.MODE_PRIVATE)
         .edit().putString("v06_voice_sub_${bundle.projectId}", root.toString()).apply()
 }
 
@@ -109,7 +109,7 @@ private fun buildSyncedCues(
         tempoPace.contains("1.15x") -> 12
         else -> 15
     }
-    val savedV03Raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val savedV03Raw = context.getSharedPreferences(VOICE_PREFS, Context.MODE_PRIVATE)
         .getString("v03_bundle_$projectId", null)
     val sceneTexts = mutableListOf<Pair<String, Int>>()
     if (savedV03Raw != null) {
@@ -121,7 +121,7 @@ private fun buildSyncedCues(
                     val narr = s.optString("narration", "").trim()
                     val title = s.optString("title", "Adegan ${i + 1}").trim()
                     val dur = s.optInt("durationSec", baseDur).coerceAtLeast(3)
-                    val text = if (narr.isNotBlank()) narr else "$title —${fallbackTitle.ifBlank { "Topik video" }}"
+                    val text = if (narr.isNotBlank()) narr else "$title — ${fallbackTitle.ifBlank { "Topik video" }}"
                     sceneTexts.add(text to dur)
                 }
             }
@@ -134,7 +134,7 @@ private fun buildSyncedCues(
             val text = when (i) {
                 1 -> "Pembukaan: Mari bahas $topic."
                 4 -> "Penutup: Ringkasan utama tentang $topic."
-                else -> "Bagian $i: Poin penting terkait$topic."
+                else -> "Bagian $i: Poin penting terkait $topic."
             }
             sceneTexts.add(text to baseDur)
         }
@@ -189,7 +189,7 @@ fun VoiceSubtitleSection(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "Atur karakter suara, bahasa/aksen, tempo, jeda, serta draf subtitle tersinkronisasi waktu adegan (sintesis audio cloud & burn-in MP4 terhubung pada tahap rendering).",
+                "Atur karakter suara, bahasa/aksen, tempo, jeda, serta draf subtitle tersinkronisasi waktu adegan.",
                 color = Color(0xFF77738A),
                 style = MaterialTheme.typography.bodySmall
             )
@@ -270,7 +270,7 @@ fun VoiceSubtitleSection(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        "Adegan ${cue.sceneNumber} •${cue.startSec}s – ${cue.endSec}s (durasi${cue.endSec - cue.startSec}s)",
+                        "Adegan ${cue.sceneNumber} • ${cue.startSec}s – ${cue.endSec}s (durasi ${cue.endSec - cue.startSec}s)",
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF543BB2),
                         style = MaterialTheme.typography.labelLarge

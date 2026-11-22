@@ -15,11 +15,11 @@ import com.aivideostudio.app.model.TimelineProjectBundle
 import org.json.JSONArray
 import org.json.JSONObject
 
-private const val PREFS_NAME = "ai_video_studio"
+private const val TIMELINE_PREFS = "ai_video_studio"
 private val TRANSITION_CHOICES = listOf("Cut Tajam", "Cross Dissolve", "Fade In/Out")
 
 private fun buildInitialClips(context: Context, projectId: Long, fallbackTitle: String): List<TimelineClipItem> {
-    val savedV03Raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val savedV03Raw = context.getSharedPreferences(TIMELINE_PREFS, Context.MODE_PRIVATE)
         .getString("v03_bundle_$projectId", null)
     val clips = mutableListOf<TimelineClipItem>()
     if (savedV03Raw != null) {
@@ -71,11 +71,11 @@ private fun loadTimelineBundle(
         clips = buildInitialClips(context, projectId, fallbackTitle)
     )
     return try {
-        val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = context.getSharedPreferences(TIMELINE_PREFS, Context.MODE_PRIVATE)
             .getString("v07_timeline_$projectId", null) ?: return fallback
         val root = JSONObject(raw)
         val arr = root.optJSONArray("clips") ?: JSONArray()
-        val parsed = (0 until arr.length()).mapIndexed { idx, _ ->
+        val parsed = (0 until arr.length()).map { idx ->
             val o = arr.optJSONObject(idx) ?: JSONObject()
             TimelineClipItem(
                 sceneNumber = o.optInt("sceneNumber", idx + 1),
@@ -114,7 +114,7 @@ private fun saveTimelineBundle(context: Context, bundle: TimelineProjectBundle) 
         put("clips", arr)
         put("updatedAt", System.currentTimeMillis())
     }
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    context.getSharedPreferences(TIMELINE_PREFS, Context.MODE_PRIVATE)
         .edit().putString("v07_timeline_${bundle.projectId}", root.toString()).apply()
 }
 

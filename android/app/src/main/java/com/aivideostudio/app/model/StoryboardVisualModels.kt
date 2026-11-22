@@ -4,6 +4,7 @@ data class SceneVisualAsset(
     val sceneNumber: Int,
     val sceneTitle: String,
     val visualPrompt: String,
+    val sceneSummary: String = "",
     val negativePrompt: String = "teks acak, watermark, buram, distorsi wajah, anatomi cacat",
     val cameraShot: String = "Medium Shot",
     val aspectRatio: String = "9:16",

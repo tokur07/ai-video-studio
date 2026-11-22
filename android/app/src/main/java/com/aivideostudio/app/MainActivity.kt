@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import com.aivideostudio.app.ui.AiGeneratorSection
 import com.aivideostudio.app.ui.ResearchScriptSection
 import com.aivideostudio.app.ui.StoryboardVisualSection
+import com.aivideostudio.app.ui.TimelineEditorSection
+import com.aivideostudio.app.ui.VoiceSubtitleSection
 import com.aivideostudio.app.ui.loadWorkerUrl
 import com.aivideostudio.app.ui.saveWorkerUrl
 import org.json.JSONArray
@@ -340,14 +342,24 @@ private fun EditorScreen(
                 onClearPickedImage = onClearPickedImage,
                 onRequestPickImage = onRequestPickImage
             )
+            VoiceSubtitleSection(
+                context = ctx,
+                projectId = project.id,
+                projectTitle = project.title
+            )
+            TimelineEditorSection(
+                context = ctx,
+                projectId = project.id,
+                projectTitle = project.title
+            )
         }
 
         SectionHeading("Alur penyuntingan", "Fitur editor akan diaktifkan bertahap")
         EditorFeature("01", "Storyboard", "Susun urutan adegan dan alur cerita", true)
         EditorFeature("02", "Scene manager", "Atur visual, durasi, dan narasi tiap adegan", true)
-        EditorFeature("03", "Audio & subtitle", "Kelola voice-over, musik, dan teks", false)
-        EditorFeature("04", "Timeline & rendering", "Gabungkan seluruh elemen menjadi video MP4", false)
-        Text("Storyboard visual & impor aset v0.5 tersimpan per proyek; suara/subtitle (v0.6), timeline (v0.7), rendering MP4 (v0.8), dan cloud penuh (v0.9) akan diaktifkan bertahap.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        EditorFeature("03", "Audio & subtitle", "Kelola arahan suara dan sinkronisasi subtitle", true)
+        EditorFeature("04", "Timeline & rendering", "Susun timeline (v0.7); rendering MP4 (v0.8) & cloud penuh (v0.9) menyusul", true)
+        Text("Modul v0.6 (suara & subtitle) dan v0.7 (timeline editor) tersimpan per proyek; rendering MP4 via FFmpeg (v0.8) dan integrasi Supabase/R2 (v0.9) akan dikerjakan pada gelombang berikutnya.", color = Muted, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -377,7 +389,7 @@ private fun SettingsScreen(context: Context, projectCount: Int) {
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = SurfaceWhite)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("STATUS APLIKASI", color = Muted, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                SettingRow("Versi aplikasi", "0.2.0 (v0.5 storyboard & visual)")
+                SettingRow("Versi aplikasi", "0.2.0 (v0.6–v0.7 suara, subtitle & timeline)")
                 HorizontalDivider(color = Color(0xFFEDEAF4))
                 SettingRow("Penyimpanan proyek", "Lokal perangkat")
                 HorizontalDivider(color = Color(0xFFEDEAF4))

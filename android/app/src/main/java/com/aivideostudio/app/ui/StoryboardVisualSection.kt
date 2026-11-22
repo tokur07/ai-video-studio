@@ -1,5 +1,7 @@
 package com.aivideostudio.app.ui
 
+import android.util.Log
+
 import android.content.Context
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*

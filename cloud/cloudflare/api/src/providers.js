@@ -232,7 +232,7 @@ export async function runResearchAndScriptProvider(env, payload) {
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: buildUserPrompt(payload) }
+          { role: "user", content: buildUserPrompt(payload, researchContext) }
         ]
       })
     });
@@ -261,7 +261,7 @@ export async function runResearchAndScriptProvider(env, payload) {
         temperature: 0.4,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: buildUserPrompt(payload) }
+          { role: "user", content: buildUserPrompt(payload, researchContext) }
         ]
       })
     });

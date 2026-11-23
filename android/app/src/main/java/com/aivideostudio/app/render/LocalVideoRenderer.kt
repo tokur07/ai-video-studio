@@ -46,7 +46,6 @@ object LocalVideoRenderer {
         projectId: Long,
         audioEnabled: Boolean,
         subtitlesEnabled: Boolean,
-        speechRate: Float,
         onStatus: (String, Int) -> Unit,
         onComplete: (Boolean, String, String) -> Unit
     ) {
@@ -62,6 +61,8 @@ object LocalVideoRenderer {
         val renderDir = File(app.filesDir, "renders").apply { mkdirs() }
         val output = File(renderDir, "project_${projectId}_${System.currentTimeMillis()}.mp4")
         val ttsFile = File(renderDir, "narration_${projectId}_${System.currentTimeMillis()}.wav")
+        val tempo = runCatching { JSONObject(prefs.getString("v06_voice_sub_${projectId}", "{}") ?: "{}").optString("tempoPace", "Normal") }.getOrDefault("Normal")
+        val speechRate = when { tempo.contains("0.85x") -> 0.85f; tempo.contains("1.15x") -> 1.15f; else -> 1.0f }
 
         fun startExport(audioFile: File?) {
             try {
@@ -110,7 +111,7 @@ object LocalVideoRenderer {
                     }
 
                     override fun onError(composition: Composition, result: ExportResult, exception: ExportException) {
-                        onComplete(false, "", "Render MP4 gagal: ${exception.message ?: exception.errorCodeName}")
+                        onComplete(false, "", "Render MP4 gagal: ${exception.message ?: "kesalahan encoder"}")
                     }
                 }
                 Transformer.Builder(app).addListener(listener).build().start(composition, output.absolutePath)
@@ -130,15 +131,14 @@ object LocalVideoRenderer {
 
         onStatus("Membuat narasi bahasa Indonesia dari teks adegan...", 10)
         val utteranceId = "studio_${projectId}_${System.currentTimeMillis()}"
-        val tts = TextToSpeech(app) { status ->
+        lateinit var tts: TextToSpeech
+        tts = TextToSpeech(app) { status ->
             if (status != TextToSpeech.SUCCESS) {
                 onComplete(false, "", "Mesin Text-to-Speech Android tidak dapat dijalankan.")
                 return@TextToSpeech
             }
             try {
                 val locale = Locale.forLanguageTag("id-ID")
-                val languageStatus = ttsLanguageStatusPlaceholder()
-                @Suppress("UNUSED_VARIABLE") val ignored = languageStatus
                 val result = tts.setLanguage(locale)
                 if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                     tts.shutdown()
@@ -176,7 +176,6 @@ object LocalVideoRenderer {
         }
     }
 
-    private fun ttsLanguageStatusPlaceholder(): Int = 0
 
     private fun loadAssets(context: Context, projectId: Long, subtitlesEnabled: Boolean): List<RenderAsset> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -211,7 +210,7 @@ object LocalVideoRenderer {
             val uri = asset.optString("localVideoUri", "").trim()
             if (uri.isBlank()) continue
             val sceneNumber = asset.optInt("sceneNumber", i + 1)
-            val subtitle = if (subtitlesEnabled) cueMap[sceneNumber].orEmpty() else ""
+            val subtitle = cueMap[sceneNumber].orEmpty()
             result.add(RenderAsset(sceneNumber, uri, subtitle))
         }
         return result.sortedBy { it.sceneNumber }

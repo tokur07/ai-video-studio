@@ -123,6 +123,9 @@ export default {
         } else {
           const imgRes = await runImageGeneratorProvider(env, {
             visualPrompt,
+            sceneTitle: body?.sceneTitle || "",
+            sceneSummary: body?.sceneSummary || "",
+            visualStyle: body?.visualStyle || "Fotorealistik & Sinematik",
             negativePrompt: body?.negativePrompt || "",
             aspectRatio: body?.aspectRatio || "9:16"
           });

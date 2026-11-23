@@ -61,12 +61,21 @@ object LocalVideoRenderer {
         }
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val cueTexts = assets.map { it.subtitle }.filter { it.isNotBlank() }
-        val narration = cueTexts.joinToString(". ").take(3500)
+        val narration = cueTexts.joinToString("  ") { line -> line.trim().trimEnd('.', ',', ';', ':') + "." }.take(3500)
         val renderDir = File(app.filesDir, "renders").apply { mkdirs() }
         val output = File(renderDir, "project_${projectId}_${System.currentTimeMillis()}.mp4")
         val ttsFile = File(renderDir, "narration_${projectId}_${System.currentTimeMillis()}.wav")
-        val tempo = runCatching { JSONObject(prefs.getString("v06_voice_sub_${projectId}", "{}") ?: "{}").optString("tempoPace", "Normal") }.getOrDefault("Normal")
-        val speechRate = when { tempo.contains("0.85x") -> 0.85f; tempo.contains("1.15x") -> 1.15f; else -> 1.0f }
+        val voicePrefs = runCatching { JSONObject(prefs.getString("v06_voice_sub_${projectId}", "{}") ?: "{}") }.getOrDefault(JSONObject())
+        val tempo = voicePrefs.optString("tempoPace", "Normal")
+        val voiceCharacter = voicePrefs.optString("voiceCharacter", "Narator Jelas & Hangat")
+        val baseRate = when { tempo.contains("0.85x") -> 0.82f; tempo.contains("1.15x") -> 1.02f; else -> 0.92f }
+        val speechRate = baseRate.coerceIn(0.78f, 1.08f)
+        val speechPitch = when {
+            voiceCharacter.contains("Enerjik") -> 1.04f
+            voiceCharacter.contains("Dokumenter") -> 0.94f
+            voiceCharacter.contains("Tenang") -> 0.92f
+            else -> 0.98f
+        }
 
         fun startExport(audioFile: File?) {
             try {
@@ -155,9 +164,14 @@ object LocalVideoRenderer {
                     onComplete(false, "", "Suara bahasa Indonesia belum tersedia. Pasang paket suara Indonesia di pengaturan Text-to-Speech Android.")
                     return@TextToSpeech
                 }
-                val localVoice = tts.voices?.firstOrNull { it.locale.language == "id" && !it.isNetworkConnectionRequired }
-                if (localVoice != null) tts.voice = localVoice
-                tts.setSpeechRate(speechRate.coerceIn(0.75f, 1.35f))
+                val indonesianVoices = tts.voices?.filter { it.locale.language == "id" }.orEmpty()
+                val preferredVoice = indonesianVoices.maxWithOrNull(
+                    compareBy<android.speech.tts.Voice> { it.quality }
+                        .thenBy { if (it.isNetworkConnectionRequired) 1 else 0 }
+                )
+                if (preferredVoice != null) tts.voice = preferredVoice
+                tts.setSpeechRate(speechRate)
+                tts.setPitch(speechPitch)
                 tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(id: String?) = Unit
                     override fun onDone(id: String?) {

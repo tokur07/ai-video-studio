@@ -241,6 +241,9 @@ fun StoryboardVisualSection(
             sceneNumber = asset.sceneNumber,
             visualPrompt = asset.visualPrompt,
             negativePrompt = asset.negativePrompt,
+            sceneTitle = asset.sceneTitle,
+            sceneSummary = asset.sceneSummary,
+            visualStyle = bundle.visualStyle,
             aspectRatio = bundle.aspectRatio
         ) { res ->
             generatingSceneNum = null
@@ -325,10 +328,11 @@ fun StoryboardVisualSection(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = { rebuildPromptsFromTopic() },
-                    enabled = !isGeneratingStoryboard && generatingSceneNum == null,
+                    enabled = !isGeneratingStoryboard && generatingSceneNum == null &&
+                        bundle.assets.none { it.sceneSummary.isNotBlank() },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Prompt Cepat")
+                    Text("Prompt Umum (tanpa naskah)")
                 }
                 OutlinedButton(
                     onClick = {

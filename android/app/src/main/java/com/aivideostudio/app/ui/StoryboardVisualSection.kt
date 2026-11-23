@@ -303,6 +303,51 @@ fun StoryboardVisualSection(
         }
     }
 
+    fun triggerAllSceneVideoGeneration() {
+        if (generatingVideoSceneNum != null || generatingSceneNum != null) return
+        val pending = bundle.assets
+            .filter { it.localImageUri.isNotBlank() && it.localVideoUri.isBlank() }
+            .sortedBy { it.sceneNumber }
+        if (pending.isEmpty()) {
+            statusText = "Semua adegan yang memiliki gambar sudah mempunyai video."
+            return
+        }
+        lateinit var runNext: (Int) -> Unit
+        runNext = { index ->
+            if (index >= pending.size) {
+                generatingVideoSceneNum = null
+                statusText = "Selesai. ${pending.size} video adegan berhasil dibuat dan disimpan."
+            } else {
+                val asset = pending[index]
+                generatingVideoSceneNum = asset.sceneNumber
+                statusText = "Antrean gratis Wan 2.2: adegan ${index + 1}/${pending.size} (adegan #${asset.sceneNumber})."
+                WanVideoClient.generateAsync(
+                    context = context,
+                    workerBaseUrl = loadWorkerUrl(context),
+                    projectId = projectId,
+                    sceneNumber = asset.sceneNumber,
+                    imageUri = asset.localImageUri,
+                    prompt = asset.visualPrompt + ". Cinematic 3D animated film, preserve the exact character identity, face, clothing, proportions and scene composition. Natural body movement, clear physical action, subtle cinematic camera movement, smooth temporal consistency.",
+                    negativePrompt = asset.negativePrompt
+                ) { result ->
+                    if (!result.success || result.localUri.isBlank()) {
+                        generatingVideoSceneNum = null
+                        statusText = "Antrean berhenti pada adegan #${asset.sceneNumber}: ${result.message} Video sebelumnya tetap tersimpan; tekan Generate Semua lagi untuk melanjutkan."
+                    } else {
+                        val nextAssets = bundle.assets.map { item ->
+                            if (item.sceneNumber == asset.sceneNumber) item.copy(localVideoUri = result.localUri) else item
+                        }
+                        val updated = bundle.copy(assets = nextAssets, updatedAt = System.currentTimeMillis())
+                        bundle = updated
+                        saveVisualBundle(context, updated)
+                        runNext(index + 1)
+                    }
+                }
+            }
+        }
+        runNext(0)
+    }
+
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -352,6 +397,15 @@ fun StoryboardVisualSection(
                         label = { Text(ratio) }
                     )
                 }
+            }
+
+            Button(
+                onClick = { triggerAllSceneVideoGeneration() },
+                enabled = generatingVideoSceneNum == null && generatingSceneNum == null &&
+                    bundle.assets.any { it.localImageUri.isNotBlank() && it.localVideoUri.isBlank() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Generate Semua Video Adegan Secara Berurutan")
             }
 
             Button(

@@ -157,10 +157,11 @@ export default {
           try { params = typeof paramsRaw === "string" ? JSON.parse(paramsRaw) : {}; } catch (_) {}
           const spaceBase = (env.HF_VIDEO_SPACE_BASE || "https://cbensimon-wan2-2-fp8da-aoti-preview2.hf.space").replace(/\/$/, "");
           const fnName = env.HF_VIDEO_FN_NAME || "generate_video";
-          const uploaded = await uploadWanImage(spaceBase, image);
-          const eventId = await submitWanVideo(spaceBase, fnName, uploaded, image.name || "scene.png", params);
+          const hfHeaders = env.HF_TOKEN ? { Authorization: `Bearer ${env.HF_TOKEN}` } : {};
+          const uploaded = await uploadWanImage(spaceBase, image, hfHeaders);
+          const eventId = await submitWanVideo(spaceBase, fnName, uploaded, image.name || "scene.png", params, hfHeaders);
           const upstream = await fetch(`${spaceBase}/gradio_api/call/${fnName}/${eventId}`, {
-            headers: { Accept: "text/event-stream" }
+            headers: { Accept: "text/event-stream", ...hfHeaders }
           });
           if (!upstream.ok || !upstream.body) {
             throw new Error(`Tidak dapat membuka antrean hasil video (HTTP ${upstream.status}).`);
@@ -194,17 +195,17 @@ export default {
 };
 
 
-async function uploadWanImage(spaceBase, image) {
+async function uploadWanImage(spaceBase, image, authHeaders = {}) {
   const fd = new FormData();
   fd.append("files", image, image.name || "scene.png");
-  const res = await fetch(`${spaceBase}/gradio_api/upload`, { method: "POST", body: fd });
+  const res = await fetch(`${spaceBase}/gradio_api/upload`, { method: "POST", headers: authHeaders, body: fd });
   if (!res.ok) throw new Error(`Unggah gambar ke GPU gagal (HTTP ${res.status}). Space mungkin sedang tidur atau antrean penuh.`);
   const paths = await res.json();
   if (!Array.isArray(paths) || !paths[0]) throw new Error("Space tidak mengembalikan lokasi gambar yang valid.");
   return paths[0];
 }
 
-async function submitWanVideo(spaceBase, fnName, imagePath, fileName, params) {
+async function submitWanVideo(spaceBase, fnName, imagePath, fileName, params, authHeaders = {}) {
   const image = {
     path: imagePath,
     url: `${spaceBase}/gradio_api/file=${imagePath}`,
@@ -234,7 +235,7 @@ async function submitWanVideo(spaceBase, fnName, imagePath, fileName, params) {
   ];
   const res = await fetch(`${spaceBase}/gradio_api/call/${fnName}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders },
     body: JSON.stringify({ data })
   });
   if (!res.ok) throw new Error(`Space menolak job video (HTTP ${res.status}).`);

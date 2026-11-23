@@ -15,6 +15,7 @@ import androidx.media3.common.Effects
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.OverlayEffect
+import androidx.media3.effect.Presentation
 import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.effect.TextOverlay
 import androidx.media3.transformer.Composition
@@ -46,6 +47,8 @@ object LocalVideoRenderer {
         projectId: Long,
         audioEnabled: Boolean,
         subtitlesEnabled: Boolean,
+        resolution: String,
+        aspectRatio: String,
         onStatus: (String, Int) -> Unit,
         onComplete: (Boolean, String, String) -> Unit
     ) {
@@ -67,6 +70,11 @@ object LocalVideoRenderer {
         fun startExport(audioFile: File?) {
             try {
                 onStatus("Menyiapkan komposisi video, subtitle, dan audio...", 25)
+                val (width, height) = when (aspectRatio) {
+                    "16:9" -> if (resolution == "1080p") 1920 to 1080 else 1280 to 720
+                    "1:1" -> if (resolution == "1080p") 1080 to 1080 else 720 to 720
+                    else -> if (resolution == "1080p") 1080 to 1920 else 720 to 1280
+                }
                 val videoItems = assets.map { asset ->
                     val mediaItem = MediaItem.fromUri(Uri.parse(asset.videoUri))
                     val effects = if (subtitlesEnabled && asset.subtitle.isNotBlank()) {
@@ -80,9 +88,9 @@ object LocalVideoRenderer {
                             .setScale(0.55f, 0.55f)
                             .build()
                         val overlay = TextOverlay.createStaticTextOverlay(text, settings)
-                        Effects(emptyList(), listOf(OverlayEffect(listOf(overlay))))
+                        Effects(emptyList(), listOf(Presentation.createForWidthAndHeight(width, height, Presentation.LAYOUT_SCALE_TO_FIT), OverlayEffect(listOf(overlay))))
                     } else {
-                        Effects.EMPTY
+                        Effects(emptyList(), listOf(Presentation.createForWidthAndHeight(width, height, Presentation.LAYOUT_SCALE_TO_FIT)))
                     }
                     EditedMediaItem.Builder(mediaItem)
                         .setRemoveAudio(true)

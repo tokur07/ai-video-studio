@@ -233,7 +233,7 @@ export async function runResearchAndScriptProvider(env, payload) {
     : RESEARCH_SCRIPT_SYSTEM_PROMPT;
   const researchContext = payload.task === "storyboard" ? [] : await fetchWikipediaResearch(payload.topic);
   const userPrompt = buildUserPrompt(payload, researchContext);
-  const model = env.CLOUDFLARE_TEXT_MODEL || "@cf/meta/llama-3.1-8b-instruct";
+  const model = env.CLOUDFLARE_TEXT_MODEL || "@cf/ibm-granite/granite-4.0-h-micro";
 
   let result;
   try {
@@ -254,7 +254,13 @@ export async function runResearchAndScriptProvider(env, payload) {
     ? result.response
     : typeof result?.result?.response === "string"
       ? result.result.response
-      : "";
+      : typeof result?.choices?.[0]?.message?.content === "string"
+        ? result.choices[0].message.content
+        : typeof result?.result?.choices?.[0]?.message?.content === "string"
+          ? result.result.choices[0].message.content
+          : typeof result?.output_text === "string"
+            ? result.output_text
+            : "";
   const parsed = extractJsonObject(rawText);
   if (!parsed) {
     throw new Error("Cloudflare Workers AI tidak mengembalikan JSON yang dapat dibaca.");

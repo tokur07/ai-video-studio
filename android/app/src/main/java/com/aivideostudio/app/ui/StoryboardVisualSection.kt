@@ -3,6 +3,7 @@ package com.aivideostudio.app.ui
 import android.util.Log
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.widget.VideoView
 
 import android.content.Context
 import androidx.compose.foundation.Image
@@ -18,9 +19,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.aivideostudio.app.model.SceneVisualAsset
 import com.aivideostudio.app.model.StoryboardVisualBundle
 import com.aivideostudio.app.network.WorkerVisualClient
+import com.aivideostudio.app.network.WanVideoClient
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -69,6 +72,7 @@ private fun loadVisualBundle(
                 cameraShot = o.optString("cameraShot", "Medium Shot"),
                 aspectRatio = o.optString("aspectRatio", root.optString("aspectRatio", "9:16")),
                 localImageUri = o.optString("localImageUri", ""),
+                localVideoUri = o.optString("localVideoUri", ""),
                 assetSourceLabel = o.optString("assetSourceLabel", "Prompt Siap Pakai (Belum Ada Gambar)")
             )
         }
@@ -96,6 +100,7 @@ private fun saveVisualBundle(context: Context, bundle: StoryboardVisualBundle) {
                 put("cameraShot", a.cameraShot)
                 put("aspectRatio", a.aspectRatio)
                 put("localImageUri", a.localImageUri)
+                put("localVideoUri", a.localVideoUri)
                 put("assetSourceLabel", a.assetSourceLabel)
             })
         }
@@ -128,6 +133,7 @@ fun StoryboardVisualSection(
     var bundle by remember(projectId) { mutableStateOf(initial) }
     var activePickScene by remember(projectId) { mutableStateOf<Int?>(null) }
     var generatingSceneNum by remember(projectId) { mutableStateOf<Int?>(null) }
+    var generatingVideoSceneNum by remember(projectId) { mutableStateOf<Int?>(null) }
     var isGeneratingStoryboard by remember(projectId) { mutableStateOf(false) }
     var statusText by remember(projectId) {
         mutableStateOf("Manajemen aset, visual prompt & generate gambar AI siap untuk proyek #$projectId.")
@@ -266,6 +272,36 @@ fun StoryboardVisualSection(
         }
     }
 
+    fun triggerSceneVideoGeneration(asset: SceneVisualAsset) {
+        if (asset.localImageUri.isBlank()) {
+            statusText = "Generate atau impor gambar adegan #${asset.sceneNumber} terlebih dahulu."
+            return
+        }
+        if (generatingVideoSceneNum != null || generatingSceneNum != null) return
+        generatingVideoSceneNum = asset.sceneNumber
+        statusText = "Mengirim adegan #${asset.sceneNumber} ke Wan 2.2. GPU gratis dapat mengantre dan proses pertama bisa lama..."
+        WanVideoClient.generateAsync(
+            context = context,
+            workerBaseUrl = loadWorkerUrl(context),
+            projectId = projectId,
+            sceneNumber = asset.sceneNumber,
+            imageUri = asset.localImageUri,
+            prompt = asset.visualPrompt + ". Cinematic 3D animated film, preserve the exact character identity, face, clothing, proportions and scene composition. Natural body movement, clear physical action, subtle cinematic camera movement, smooth temporal consistency.",
+            negativePrompt = asset.negativePrompt
+        ) { result ->
+            generatingVideoSceneNum = null
+            statusText = result.message
+            if (result.success && result.localUri.isNotBlank()) {
+                val next = bundle.assets.map { item ->
+                    if (item.sceneNumber == asset.sceneNumber) item.copy(localVideoUri = result.localUri) else item
+                }
+                val updated = bundle.copy(assets = next, updatedAt = System.currentTimeMillis())
+                bundle = updated
+                saveVisualBundle(context, updated)
+            }
+        }
+    }
+
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -349,6 +385,7 @@ fun StoryboardVisualSection(
 
             for ((idx, asset) in bundle.assets.withIndex()) {
                 val isThisGenerating = generatingSceneNum == asset.sceneNumber
+                val isThisVideoGenerating = generatingVideoSceneNum == asset.sceneNumber
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF1EDFF).copy(alpha = 0.6f)),
@@ -439,6 +476,21 @@ fun StoryboardVisualSection(
                                 )
                             }
                         }
+                        if (asset.localVideoUri.isNotBlank()) {
+                            Text("VIDEO ADEGAN TERSIMPAN", color = Color(0xFF247B5B), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                            AndroidView(
+                                factory = { ctx -> VideoView(ctx).apply {
+                                    setVideoURI(Uri.parse(asset.localVideoUri))
+                                    setOnPreparedListener { player -> player.isLooping = true; start() }
+                                } },
+                                update = { view -> if (view.tag != asset.localVideoUri) {
+                                    view.tag = asset.localVideoUri
+                                    view.setVideoURI(Uri.parse(asset.localVideoUri))
+                                    view.setOnPreparedListener { player -> player.isLooping = true; view.start() }
+                                } },
+                                modifier = Modifier.fillMaxWidth().height(220.dp)
+                            )
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             Button(
                                 onClick = { triggerAiImageGeneration(asset) },
@@ -457,6 +509,13 @@ fun StoryboardVisualSection(
                             ) {
                                 Text("Impor Gambar")
                             }
+                        }
+                        Button(
+                            onClick = { triggerSceneVideoGeneration(asset) },
+                            enabled = asset.localImageUri.isNotBlank() && generatingVideoSceneNum == null && generatingSceneNum == null && !isGeneratingStoryboard,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (isThisVideoGenerating) "Mengantre / Membuat Video..." else if (asset.localVideoUri.isNotBlank()) "Buat Ulang Video Adegan" else "Animasi Video Wan 2.2 (Gratis)")
                         }
                     }
                 }

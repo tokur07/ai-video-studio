@@ -39,7 +39,10 @@ object WanVideoClient {
                 require(prompt.isNotBlank()) { "Prompt gerakan masih kosong." }
                 val clean = workerBaseUrl.trim().trimEnd('/')
                 require(clean.isNotBlank()) { "URL Cloudflare Worker belum diatur." }
-                val imageBytes = context.contentResolver.openInputStream(Uri.parse(imageUri))?.use { it.readBytes() }
+                val imageContentUri = Uri.parse(imageUri)
+                val imageMime = context.contentResolver.getType(imageContentUri) ?: "image/png"
+                val imageExtension = when (imageMime.lowercase()) { "image/jpeg", "image/jpg" -> "jpg"; "image/webp" -> "webp"; else -> "png" }
+                val imageBytes = context.contentResolver.openInputStream(imageContentUri)?.use { it.readBytes() }
                     ?: throw IllegalStateException("File gambar adegan tidak dapat dibaca.")
                 require(imageBytes.size <= 8 * 1024 * 1024) { "Gambar maksimal 8 MB untuk layanan GPU gratis." }
                 val boundary = "----AIVideoStudio${System.currentTimeMillis()}"
@@ -134,6 +137,7 @@ object WanVideoClient {
         when (value) {
             is String -> {
                 if (value.startsWith("https://") || value.startsWith("http://")) return value
+                if (value.startsWith("/gradio_api/file=")) return "$SPACE_BASE$value"
                 if (value.endsWith(".mp4") || value.contains("/tmp/") || value.contains("gradio")) {
                     return "$SPACE_BASE/gradio_api/file=$value"
                 }

@@ -91,6 +91,7 @@ fun CloudSyncSection(
     var bundle by remember(projectId) { mutableStateOf(initial) }
     var password by remember(projectId) { mutableStateOf("") }
     var busy by remember(projectId) { mutableStateOf(false) }
+    var confirmCloudDelete by remember(projectId) { mutableStateOf(false) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     fun signInSupabase() {
@@ -193,7 +194,7 @@ fun CloudSyncSection(
         bundle = bundle.copy(syncStatus = "Menyinkronkan metadata proyek ke Supabase...")
         Thread {
             try {
-                val conn = (URL("$sbUrl/rest/v1/projects?on_conflict=id").openConnection() as HttpURLConnection).apply {
+                val conn = (URL("$sbUrl/rest/v1/studio_projects?on_conflict=user_id,project_id").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     connectTimeout = 12000
                     readTimeout = 20000
@@ -205,12 +206,29 @@ fun CloudSyncSection(
                         setRequestProperty("Authorization", "Bearer $token")
                     }
                 }
+                if (token.isBlank()) throw IllegalStateException("Login Supabase terlebih dahulu sebelum sinkronisasi cloud.")
+                val userConn = (URL("$sbUrl/auth/v1/user").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 12000
+                    readTimeout = 15000
+                    setRequestProperty("apikey", anonKey)
+                    setRequestProperty("Authorization", "Bearer $token")
+                }
+                val userCode = userConn.responseCode
+                val userStream = if (userCode in 200..299) userConn.inputStream else userConn.errorStream
+                val userRaw = BufferedReader(InputStreamReader(userStream, Charsets.UTF_8)).use { it.readText() }
+                userConn.disconnect()
+                if (userCode !in 200..299) throw IllegalStateException("Sesi Supabase tidak valid (HTTP $userCode). Login ulang.")
+                val userId = JSONObject(userRaw).optString("id", "")
+                if (userId.isBlank()) throw IllegalStateException("Supabase tidak mengembalikan ID pengguna.")
                 val bodyJson = JSONObject().apply {
-                    put("id", projectId)
+                    put("project_id", projectId.toString())
+                    put("user_id", userId)
                     put("title", projectTitle)
-                    put("type", projectType)
-                    put("mode", projectMode)
+                    put("project_type", projectType)
+                    put("production_mode", projectMode)
                     put("r2_prefix", if (r2Info.isNotBlank()) "$r2Info/projects/$projectId/" else "projects/$projectId/")
+                    put("updated_at", java.time.Instant.now().toString())
                 }
                 OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use {
                     it.write(bodyJson.toString())
@@ -245,6 +263,51 @@ fun CloudSyncSection(
                     )
                     bundle = next
                     saveCloudBundle(context, next)
+                }
+            }
+        }.start()
+    }
+
+    fun deleteCloudMetadata() {
+        val sbUrl = loadSupabaseUrl(context).trim().trimEnd('/')
+        val anonKey = loadSupabaseAnonKey(context).trim()
+        val token = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_SUPABASE_ACCESS_TOKEN, "") ?: ""
+        if (sbUrl.isBlank() || anonKey.isBlank() || token.isBlank()) {
+            bundle = bundle.copy(syncStatus = "Login Supabase diperlukan untuk menghapus metadata cloud.")
+            return
+        }
+        busy = true
+        bundle = bundle.copy(syncStatus = "Memeriksa kepemilikan lalu menghapus metadata cloud...")
+        Thread {
+            try {
+                val conn = (URL("$sbUrl/rest/v1/studio_projects?project_id=eq.$projectId").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "DELETE"
+                    connectTimeout = 12000
+                    readTimeout = 20000
+                    setRequestProperty("apikey", anonKey)
+                    setRequestProperty("Authorization", "Bearer $token")
+                    setRequestProperty("Prefer", "return=minimal")
+                }
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val raw = if (stream != null) BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() } else ""
+                conn.disconnect()
+                mainHandler.post {
+                    busy = false
+                    val message = if (code in 200..299) {
+                        "Metadata cloud proyek berhasil dihapus. File video/gambar belum pernah diunggah ke R2 oleh versi ini."
+                    } else {
+                        "Penghapusan cloud gagal (HTTP $code): ${raw.take(140)}"
+                    }
+                    val next = bundle.copy(syncStatus = message, lastSyncedAt = if (code in 200..299) 0L else bundle.lastSyncedAt)
+                    bundle = next
+                    if (code in 200..299) saveCloudBundle(context, next)
+                }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    busy = false
+                    bundle = bundle.copy(syncStatus = "Gagal menghapus metadata cloud: ${e.message ?: "kesalahan jaringan"}")
                 }
             }
         }.start()
@@ -288,6 +351,23 @@ fun CloudSyncSection(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            if (confirmCloudDelete) {
+                AlertDialog(
+                    onDismissRequest = { confirmCloudDelete = false },
+                    title = { Text("Hapus metadata cloud?") },
+                    text = { Text("Data metadata proyek ini akan dihapus dari akun Supabase yang sedang login. Video dan gambar tidak ikut terhapus karena belum diunggah ke R2 oleh versi aplikasi saat ini.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmCloudDelete = false
+                            deleteCloudMetadata()
+                        }) { Text("Hapus cloud", color = Color(0xFFB3261E)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmCloudDelete = false }) { Text("Batal") }
+                    }
+                )
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = { signInSupabase() },
@@ -303,6 +383,13 @@ fun CloudSyncSection(
                 ) {
                     Text("Sync Proyek")
                 }
+            }
+            OutlinedButton(
+                onClick = { confirmCloudDelete = true },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Hapus metadata proyek dari cloud", color = Color(0xFFB3261E))
             }
         }
     }

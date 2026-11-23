@@ -27,7 +27,7 @@ PENGUATAN KEDALAMAN NASKAH (WAJIB, BUKAN OPSIONAL):
 16. BODY harus terasa seperti penceritaan dokumenter: bangun konteks, lanjutkan detail/fakta, jelaskan hubungan sebab-akibat, lalu tunjukkan arti pentingnya. Gunakan transisi alami. Hindari daftar poin yang dibacakan kaku, repetisi, kalimat kosong, dan klaim bombastis tanpa dasar.
 17. CLOSING harus memberi kesimpulan atau perspektif yang lahir dari fakta yang dibahas, bukan penutup generik seperti "Demikian pembahasan kali ini". Jangan mengulang opening.
 18. Perkiraan panjang: gunakan target durasi sebagai batas nyata. Untuk narasi bahasa Indonesia, sasarkan sekitar 125–150 kata per menit, kecuali gaya/durasi format mengharuskan lebih lambat. Jangan mengisi durasi dengan pengulangan.
-19. Fakta dan referensi: sistem ini tidak menerima hasil pencarian web langsung dalam tugas ini. Karena itu jangan mengaku telah melakukan riset web, jangan membuat nama publikasi, judul artikel, URL, kutipan, atau referensi palsu. Masukkan hanya sumber rujukan yang benar-benar diketahui dengan yakin; jika tidak, kosongkan references dan tandai klaim penting sebagai "Perlu Verifikasi" dengan catatan apa yang harus dicek. Jangan menyulap dugaan menjadi fakta.
+19. Fakta dan referensi: konteks riset dari Wikipedia bahasa Indonesia dan/atau Inggris dapat disertakan pada input sebagai retrievedResearchSources. Gunakan hanya sumber yang benar-benar disertakan di sana; cantumkan judul dan URL sumber tersebut pada references. Jangan menganggap Wikipedia sebagai bukti final untuk klaim kontroversial atau sensitif. Jika pencarian tidak menemukan sumber yang cocok, jangan mengaku telah memverifikasi fakta dan tandai klaim penting sebagai "Perlu Verifikasi". Jangan pernah membuat sumber atau URL palsu.
 20. Jika topik terlalu luas, pilih sudut bahasan paling kuat dan nyatakan fokusnya dalam summary. Jika topik berupa sosok bernama yang ambigu, jangan mengarang. Jika fakta spesifik belum cukup, hasilkan naskah yang jujur dan terfokus, bukan paragraf formal yang hambar.
 21. Lakukan tes anti-template: hapus nama topik dari naskah. Jika naskah masih bisa cocok untuk puluhan topik lain, tulis ulang dengan detail yang benar-benar khas topik ini.
 22. Buat alur kalimat yang nyaman diucapkan: variasikan panjang kalimat, gunakan tanda baca untuk jeda alami, hindari kalimat bertingkat terlalu panjang, singkatan yang membingungkan, dan angka/tanggal yang sulit dilafalkan. Jangan menambahkan label "Opening/Body/Closing" ke dalam isi narasi.
@@ -73,7 +73,69 @@ ATURAN PROMPT GAMBAR:
 {"scenes":[{"sceneNumber":1,"sceneTitle":"...","sceneSummary":"...","visualPrompt":"...","negativePrompt":"..."}]}
 `.trim();
 
-function buildUserPrompt(payload) {
+async function fetchWikipediaResearch(topic) {
+  const cleanTopic = String(topic || "").trim();
+  if (!cleanTopic) return [];
+  const languages = ["id", "en"];
+  const results = await Promise.all(languages.map(async (lang) => {
+    try {
+      const searchUrl = new URL(`https://${lang}.wikipedia.org/w/api.php`);
+      searchUrl.search = new URLSearchParams({
+        action: "query",
+        list: "search",
+        srsearch: cleanTopic,
+        srlimit: "3",
+        format: "json",
+        utf8: "1"
+      }).toString();
+      const searchRes = await fetch(searchUrl.toString(), {
+        headers: { "User-Agent": "AI-Video-Studio/0.4 (open educational video research)" }
+      });
+      if (!searchRes.ok) return [];
+      const searchData = await searchRes.json();
+      const hits = searchData?.query?.search || [];
+      const pageIds = hits.map((hit) => hit.pageid).filter(Boolean);
+      if (!pageIds.length) return [];
+      const detailUrl = new URL(`https://${lang}.wikipedia.org/w/api.php`);
+      detailUrl.search = new URLSearchParams({
+        action: "query",
+        prop: "extracts",
+        exintro: "1",
+        explaintext: "1",
+        exchars: "2600",
+        pageids: pageIds.join("|"),
+        format: "json"
+      }).toString();
+      const detailRes = await fetch(detailUrl.toString(), {
+        headers: { "User-Agent": "AI-Video-Studio/0.4 (open educational video research)" }
+      });
+      if (!detailRes.ok) return [];
+      const detailData = await detailRes.json();
+      const pages = detailData?.query?.pages || {};
+      return hits.map((hit) => {
+        const page = pages[String(hit.pageid)] || {};
+        const extract = String(page.extract || "").replace(/\s+/g, " ").trim();
+        return {
+          language: lang,
+          title: hit.title,
+          url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(String(hit.title).replace(/ /g, "_"))}`,
+          extract: extract.slice(0, 2600)
+        };
+      }).filter((item) => item.extract.length > 180);
+    } catch (_) {
+      return [];
+    }
+  }));
+  const seen = new Set();
+  return results.flat().filter((item) => {
+    const key = item.title.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 5);
+}
+
+function buildUserPrompt(payload, researchContext = []) {
   return JSON.stringify({
     task: payload.task || "research_script",
     script: payload.script || null,
@@ -84,7 +146,8 @@ function buildUserPrompt(payload) {
     writingStyle: payload.writingStyle || "Informatif & Jelas",
     targetAudience: payload.targetAudience || "Umum",
     revisionInstruction: payload.revisionInstruction || "",
-    currentDraft: payload.currentDraft || null
+    currentDraft: payload.currentDraft || null,
+    retrievedResearchSources: researchContext
   });
 }
 
@@ -112,13 +175,15 @@ export async function runResearchAndScriptProvider(env, payload) {
     ? STORYBOARD_SYSTEM_PROMPT
     : RESEARCH_SCRIPT_SYSTEM_PROMPT;
   const requested = (payload.provider || env.DEFAULT_AI_PROVIDER || "gemini").toLowerCase();
+  const researchContext = payload.task === "storyboard" ? [] : await fetchWikipediaResearch(payload.topic);
+  const userPrompt = buildUserPrompt(payload, researchContext);
 
   if (requested === "gemini" && env.GEMINI_API_KEY) {
     const model = env.GEMINI_MODEL || "gemini-3.8-flash";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
     const requestBody = JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: buildUserPrompt(payload) }] }],
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       generationConfig: { responseMimeType: "application/json", temperature: 0.4 }
     });
 

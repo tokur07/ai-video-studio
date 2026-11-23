@@ -46,7 +46,7 @@ object WanVideoClient {
                 val conn = (URL("$clean/v1/generate-video").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     connectTimeout = 30000
-                    readTimeout = 300000
+                    readTimeout = 900000
                     doOutput = true
                     setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
                     setRequestProperty("Accept", "text/event-stream")
@@ -78,8 +78,7 @@ object WanVideoClient {
                     val message = runCatching { JSONObject(error).optString("error") }.getOrNull().orEmpty()
                     throw IllegalStateException(message.ifBlank { "Worker video gagal (HTTP $code)." })
                 }
-                val videoUrl = readSseVideoUrl(conn)
-                conn.disconnect()
+                val videoUrl = try { readSseVideoUrl(conn) } finally { conn.disconnect() }
                 val videoConn = (URL(videoUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 30000
                     readTimeout = 120000
@@ -99,30 +98,60 @@ object WanVideoClient {
     }
 
     private fun readSseVideoUrl(conn: HttpURLConnection): String {
-        val reader = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8))
-        var event = "message"
-        val data = StringBuilder()
-        while (true) {
-            val line = reader.readLine() ?: break
-            if (line.startsWith("event:")) event = line.substringAfter(":").trim()
-            else if (line.startsWith("data:")) {
-                if (data.isNotEmpty()) data.append("\n")
-                data.append(line.substringAfter(":").trim())
-            } else if (line.isBlank()) {
-                if (event == "error") throw IllegalStateException(data.toString().ifBlank { "Model video melaporkan error." })
-                if (event == "complete") {
-                    val payload = JSONArray(data.toString())
-                    val first = payload.optJSONObject(0)
-                    val url = first?.optString("url").orEmpty()
-                    val path = first?.optString("path").orEmpty()
-                    if (url.startsWith("https://")) return url
-                    if (path.isNotBlank()) return "$SPACE_BASE/gradio_api/file=$path"
-                    throw IllegalStateException("Wan 2.2 selesai tetapi tidak mengembalikan URL MP4.")
+        conn.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+            var event = "message"
+            val data = StringBuilder()
+            while (true) {
+                val line = reader.readLine() ?: break
+                if (line.startsWith("event:")) {
+                    event = line.substringAfter(":").trim()
+                } else if (line.startsWith("data:")) {
+                    if (data.isNotEmpty()) data.append("\n")
+                    data.append(line.substringAfter(":").trim())
+                } else if (line.isBlank()) {
+                    if (event == "error") {
+                        throw IllegalStateException(data.toString().ifBlank { "Model video melaporkan error." })
+                    }
+                    if (event == "complete") {
+                        val payload = JSONArray(data.toString())
+                        // The Space returns both a Video component value and a File download value.
+                        // Accept either Gradio FileData objects or legacy string paths.
+                        for (index in 0 until payload.length()) {
+                            val candidate = findGradioFile(payload.opt(index))
+                            if (candidate != null) return candidate
+                        }
+                        throw IllegalStateException("Wan 2.2 selesai tetapi tidak mengembalikan file MP4 yang dapat diunduh.")
+                    }
+                    event = "message"
+                    data.setLength(0)
                 }
-                event = "message"
-                data.setLength(0)
             }
         }
         throw IllegalStateException("Antrean ditutup sebelum video selesai. Coba ulangi saat GPU tersedia.")
+    }
+
+    private fun findGradioFile(value: Any?): String? {
+        when (value) {
+            is String -> {
+                if (value.startsWith("https://") || value.startsWith("http://")) return value
+                if (value.endsWith(".mp4") || value.contains("/tmp/") || value.contains("gradio")) {
+                    return "$SPACE_BASE/gradio_api/file=$value"
+                }
+            }
+            is JSONObject -> {
+                val directUrl = value.optString("url").orEmpty()
+                if (directUrl.startsWith("https://") || directUrl.startsWith("http://")) return directUrl
+                val path = value.optString("path").orEmpty()
+                if (path.isNotBlank()) return "$SPACE_BASE/gradio_api/file=$path"
+                val video = value.opt("video")
+                findGradioFile(video)?.let { return it }
+                val nested = value.opt("data")
+                findGradioFile(nested)?.let { return it }
+            }
+            is JSONArray -> {
+                for (i in 0 until value.length()) findGradioFile(value.opt(i))?.let { return it }
+            }
+        }
+        return null
     }
 }

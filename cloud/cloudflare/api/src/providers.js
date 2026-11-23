@@ -169,6 +169,60 @@ function extractJsonObject(rawText) {
   }
 }
 
+function validateResearchOutput(parsed, payload, researchContext) {
+  const issues = [];
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, issues: ["Jawaban AI bukan objek JSON yang valid."] };
+  }
+  const topic = String(payload.topic || "").trim();
+  const script = parsed.script && typeof parsed.script === "object" ? parsed.script : {};
+  const opening = String(script.opening || "").trim();
+  const body = String(script.body || "").trim();
+  const closing = String(script.closing || "").trim();
+  const summary = String(parsed.summary || "").trim();
+  const keyPoints = Array.isArray(parsed.keyPoints) ? parsed.keyPoints.filter(v => typeof v === "string" && v.trim()) : [];
+  const factChecks = Array.isArray(parsed.factChecks) ? parsed.factChecks.filter(v => v && typeof v.claim === "string" && v.claim.trim()) : [];
+  const references = Array.isArray(parsed.references) ? parsed.references : [];
+  const wordCount = body.split(/\\s+/).filter(Boolean).length;
+  const targetWords = Math.max(45, Math.round((Number(payload.targetDurationSec) || 60) / 60 * 95));
+
+  if (!String(parsed.topicType || "").trim()) issues.push("Jenis topik tidak ditentukan.");
+  if (summary.length < 45) issues.push("Ringkasan riset terlalu pendek atau kosong.");
+  if (keyPoints.length < 4) issues.push("Poin riset kurang dari empat fakta/poin khusus.");
+  if (factChecks.length < 2) issues.push("Pemeriksaan fakta kurang dari dua klaim.");
+  if (opening.length < 25) issues.push("Pembukaan naskah kosong atau terlalu pendek.");
+  if (wordCount < targetWords) issues.push(`Isi naskah terlalu pendek: ${wordCount} kata, minimal sekitar ${targetWords} kata untuk durasi yang diminta.`);
+  if (closing.length < 20) issues.push("Penutup naskah kosong atau terlalu pendek.");
+
+  const topicTokens = topic.toLowerCase().normalize("NFKD")
+    .replace(/[^a-z0-9\\s]/g, " ").split(/\\s+/)
+    .filter(token => token.length >= 3 && !["tentang", "sejarah", "sosok", "tokoh", "profil", "biografi", "video"].includes(token));
+  const combined = [summary, ...keyPoints, opening, body, closing].join(" ").toLowerCase();
+  if (topicTokens.length && !topicTokens.some(token => combined.includes(token))) {
+    issues.push("Isi jawaban tidak menunjukkan keterkaitan yang jelas dengan nama/topik yang diminta.");
+  }
+
+  const sourceUrls = new Set((researchContext || []).map(source => String(source.url || "").trim()).filter(Boolean));
+  for (const ref of references) {
+    const url = String(ref?.url || "").trim();
+    if (url && !sourceUrls.has(url)) {
+      issues.push("AI mencantumkan referensi yang tidak berasal dari sumber riset yang diberikan.");
+      break;
+    }
+  }
+  const genericPhrases = [
+    "mari kita telusuri bagian intinya",
+    "punya satu titik penting",
+    "dalam konteks video",
+    "demikian pembahasan kali ini",
+    "topik ini sangat menarik"
+  ];
+  if (genericPhrases.some(phrase => combined.includes(phrase))) {
+    issues.push("Naskah masih mengandung kalimat template/generik.");
+  }
+  return { ok: issues.length === 0, issues };
+}
+
 export async function runResearchAndScriptProvider(env, payload) {
   const systemPrompt = payload.task === "storyboard"
     ? STORYBOARD_SYSTEM_PROMPT
@@ -214,7 +268,12 @@ export async function runResearchAndScriptProvider(env, payload) {
     const data = await res.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
     const parsed = extractJsonObject(text);
-    return { providerUsed: `gemini (${model})`, rawText: text, parsed };
+    const quality = validateResearchOutput(parsed, payload, researchContext);
+    return {
+      providerUsed: quality.ok ? `gemini (${model})` : `gemini (${model}) ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`,
+      rawText: text,
+      parsed: quality.ok ? parsed : null
+    };
   }
 
   if (requested === "groq" && env.GROQ_API_KEY) {
@@ -242,7 +301,12 @@ export async function runResearchAndScriptProvider(env, payload) {
     const data = await res.json();
     const text = data?.choices?.[0]?.message?.content || "";
     const parsed = extractJsonObject(text);
-    return { providerUsed: `groq (${model})`, rawText: text, parsed };
+    const quality = validateResearchOutput(parsed, payload, researchContext);
+    return {
+      providerUsed: quality.ok ? `groq (${model})` : `groq (${model}) ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`,
+      rawText: text,
+      parsed: quality.ok ? parsed : null
+    };
   }
 
   if (requested === "openrouter" && env.OPENROUTER_API_KEY) {
@@ -271,7 +335,12 @@ export async function runResearchAndScriptProvider(env, payload) {
     const data = await res.json();
     const text = data?.choices?.[0]?.message?.content || "";
     const parsed = extractJsonObject(text);
-    return { providerUsed: `openrouter (${model})`, rawText: text, parsed };
+    const quality = validateResearchOutput(parsed, payload, researchContext);
+    return {
+      providerUsed: quality.ok ? `openrouter (${model})` : `openrouter (${model}) ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`,
+      rawText: text,
+      parsed: quality.ok ? parsed : null
+    };
   }
 
   return {

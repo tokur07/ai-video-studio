@@ -164,7 +164,8 @@ export default {
             headers: { Accept: "text/event-stream", ...hfHeaders }
           });
           if (!upstream.ok || !upstream.body) {
-            throw new Error(`Tidak dapat membuka antrean hasil video (HTTP ${upstream.status}).`);
+            const detail = await upstream.text().catch(() => "");
+            throw new Error(`Tidak dapat membuka antrean hasil video (HTTP ${upstream.status}): ${detail.slice(0, 300)}`);
           }
           response = new Response(upstream.body, {
             status: 200,
@@ -199,7 +200,10 @@ async function uploadWanImage(spaceBase, image, authHeaders = {}) {
   const fd = new FormData();
   fd.append("files", image, image.name || "scene.png");
   const res = await fetch(`${spaceBase}/gradio_api/upload`, { method: "POST", headers: authHeaders, body: fd });
-  if (!res.ok) throw new Error(`Unggah gambar ke GPU gagal (HTTP ${res.status}). Space mungkin sedang tidur atau antrean penuh.`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Unggah gambar ke GPU gagal (HTTP ${res.status}): ${detail.slice(0, 300)}. Periksa status Space, antrean, dan kuota ZeroGPU.`);
+  }
   const paths = await res.json();
   if (!Array.isArray(paths) || !paths[0]) throw new Error("Space tidak mengembalikan lokasi gambar yang valid.");
   return paths[0];
@@ -238,7 +242,10 @@ async function submitWanVideo(spaceBase, fnName, imagePath, fileName, params, au
     headers: { "Content-Type": "application/json", ...authHeaders },
     body: JSON.stringify({ data })
   });
-  if (!res.ok) throw new Error(`Space menolak job video (HTTP ${res.status}).`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Space menolak job video (HTTP ${res.status}): ${detail.slice(0, 300)}. Jika kuota ZeroGPU habis, pasang secret HF_TOKEN pada Worker.`);
+  }
   const body = await res.json();
   if (!body.event_id) throw new Error("Space tidak mengembalikan ID antrean video.");
   return body.event_id;

@@ -297,7 +297,8 @@ fun StoryboardVisualSection(
             sceneNumber = asset.sceneNumber,
             imageUri = asset.localImageUri,
             prompt = asset.visualPrompt + ". Cinematic 3D animated film, preserve the exact character identity, face, clothing, proportions and scene composition. Natural body movement, clear physical action, subtle cinematic camera movement, smooth temporal consistency.",
-            negativePrompt = asset.negativePrompt
+            negativePrompt = asset.negativePrompt,
+            onProgress = { message -> setStatus(message) }
         ) { result ->
             generatingVideoSceneNum = null
             setStatus(result.message.ifBlank { "Adegan #${asset.sceneNumber}: server mengembalikan hasil kosong." })
@@ -359,7 +360,8 @@ fun StoryboardVisualSection(
                 sceneNumber = asset.sceneNumber,
                 imageUri = asset.localImageUri,
                 prompt = asset.visualPrompt + ". Cinematic 3D animated film, preserve the exact character identity, face, clothing, proportions and scene composition. Natural body movement, clear physical action, subtle cinematic camera movement, smooth temporal consistency.",
-                negativePrompt = asset.negativePrompt
+                negativePrompt = asset.negativePrompt,
+                onProgress = { message -> setStatus("Adegan #${asset.sceneNumber}: $message") }
             ) { result ->
                 Log.i("AIVideoDiag", "queue result project=$projectId scene=${asset.sceneNumber} attempt=$attempt success=${result.success} message=${result.message.take(300)}")
                 if (result.success && result.localUri.isNotBlank()) {

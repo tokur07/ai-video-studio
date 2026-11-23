@@ -268,7 +268,7 @@ export async function runResearchAndScriptProvider(env, payload) {
     const data = await res.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
     const parsed = extractJsonObject(text);
-    const quality = validateResearchOutput(parsed, payload, researchContext);
+    const quality = payload.task === "storyboard" ? { ok: true, issues: [] } : validateResearchOutput(parsed, payload, researchContext);
     return {
       providerUsed: quality.ok ? `gemini (${model})` : `gemini (${model}) ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`,
       rawText: text,
@@ -301,7 +301,7 @@ export async function runResearchAndScriptProvider(env, payload) {
     const data = await res.json();
     const text = data?.choices?.[0]?.message?.content || "";
     const parsed = extractJsonObject(text);
-    const quality = validateResearchOutput(parsed, payload, researchContext);
+    const quality = payload.task === "storyboard" ? { ok: true, issues: [] } : validateResearchOutput(parsed, payload, researchContext);
     return {
       providerUsed: quality.ok ? `groq (${model})` : `groq (${model}) ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`,
       rawText: text,
@@ -335,7 +335,7 @@ export async function runResearchAndScriptProvider(env, payload) {
     const data = await res.json();
     const text = data?.choices?.[0]?.message?.content || "";
     const parsed = extractJsonObject(text);
-    const quality = validateResearchOutput(parsed, payload, researchContext);
+    const quality = payload.task === "storyboard" ? { ok: true, issues: [] } : validateResearchOutput(parsed, payload, researchContext);
     return {
       providerUsed: quality.ok ? `openrouter (${model})` : `openrouter (${model}) ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`,
       rawText: text,

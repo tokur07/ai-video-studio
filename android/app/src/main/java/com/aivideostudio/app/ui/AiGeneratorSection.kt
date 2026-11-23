@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.aivideostudio.app.generator.LocalTemplateGenerator
 import com.aivideostudio.app.model.GeneratedScript
 import com.aivideostudio.app.model.GeneratorConfig
 import com.aivideostudio.app.model.ProjectContentBundle
@@ -84,7 +83,7 @@ fun AiGeneratorSection(
             if (initialBundle.scenes.isNotEmpty() || initialBundle.script.opening.isNotBlank()) {
                 "Data naskah & storyboard dimuat dari penyimpanan proyek."
             } else {
-                "Siap membuat draf awal menggunakan ${LocalTemplateGenerator.GENERATOR_LABEL}."
+                "Siap membuat naskah mendalam melalui riset AI cloud."
             }
         )
     }
@@ -219,7 +218,7 @@ fun AiGeneratorSection(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // Banner Status & Label Generator Dasar
+        // Banner Status Generator AI
         Card(
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = SoftLavender),
@@ -271,7 +270,7 @@ fun AiGeneratorSection(
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "KONFIGURASI GENERATOR (V0.3)",
+                    "KONFIGURASI GENERATOR AI (V0.6)",
                     color = PrimaryViolet,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold

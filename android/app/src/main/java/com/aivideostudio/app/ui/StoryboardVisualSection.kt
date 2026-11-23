@@ -28,6 +28,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 private val VISUAL_STYLES = listOf(
+    "Animasi 3D Kartun Sinematik",
     "Fotorealistik & Sinematik",
     "Ilustrasi Editorial",
     "Dokumenter Arsip & Nyata",
@@ -79,7 +80,7 @@ private fun loadVisualBundle(
         StoryboardVisualBundle(
             projectId = projectId,
             aspectRatio = root.optString("aspectRatio", "9:16"),
-            visualStyle = root.optString("visualStyle", "Fotorealistik & Sinematik"),
+            visualStyle = root.optString("visualStyle", "Animasi 3D Kartun Sinematik"),
             assets = if (parsedAssets.isNotEmpty()) parsedAssets else defaultAssets,
             updatedAt = root.optLong("updatedAt", System.currentTimeMillis())
         )

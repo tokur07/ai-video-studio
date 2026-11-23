@@ -46,6 +46,7 @@ object LocalVideoRenderer {
     fun renderProject(
         context: Context,
         projectId: Long,
+        projectTitle: String,
         audioEnabled: Boolean,
         subtitlesEnabled: Boolean,
         resolution: String,
@@ -54,7 +55,7 @@ object LocalVideoRenderer {
         onComplete: (Boolean, String, String) -> Unit
     ) {
         val app = context.applicationContext
-        val assets = loadAssets(app, projectId, subtitlesEnabled)
+        val assets = loadAssets(app, projectId, projectTitle)
         if (assets.isEmpty()) {
             onComplete(false, "", "Belum ada video adegan. Buat video Wan 2.2 untuk minimal satu adegan terlebih dahulu.")
             return
@@ -203,7 +204,7 @@ object LocalVideoRenderer {
         return lines.take(3).joinToString("\n").ifBlank { value }
     }
 
-    private fun loadAssets(context: Context, projectId: Long, subtitlesEnabled: Boolean): List<RenderAsset> {
+    private fun loadAssets(context: Context, projectId: Long, fallbackTitle: String): List<RenderAsset> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val visualRaw = prefs.getString("v05_visual_$projectId", null) ?: return emptyList()
         val visual = JSONObject(visualRaw)
@@ -229,6 +230,13 @@ object LocalVideoRenderer {
                     cueMap[scene.optInt("sceneNumber", i + 1)] = narration
                 }
             }
+        }
+        if (cueMap.isEmpty()) {
+            val topic = fallbackTitle.ifBlank { "topik video" }
+            cueMap[1] = "Mari kita mengenal $topic."
+            cueMap[2] = "Kita akan melihat fakta dan bagian penting tentang $topic."
+            cueMap[3] = "Perhatikan bagaimana hal-hal tersebut saling berkaitan dalam cerita ini."
+            cueMap[4] = "Itulah rangkuman utama tentang $topic."
         }
         val result = mutableListOf<RenderAsset>()
         for (i in 0 until assetsArray.length()) {

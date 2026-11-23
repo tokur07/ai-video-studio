@@ -169,6 +169,44 @@ function extractJsonObject(rawText) {
   }
 }
 
+async function runCloudflareTextFallback(env, payload, systemPrompt, userPrompt, researchContext, reason) {
+  if (!env.AI || typeof env.AI.run !== "function") {
+    throw new Error(`Gemini API error (429): ${reason}. Cloudflare Workers AI fallback tidak tersedia pada binding AI.`);
+  }
+  const model = env.CLOUDFLARE_TEXT_MODEL || "@cf/meta/llama-3.1-8b-instruct";
+  try {
+    const result = await env.AI.run(model, {
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 3000,
+      temperature: 0.35
+    });
+    const rawText = typeof result?.response === "string"
+      ? result.response
+      : typeof result?.result?.response === "string"
+        ? result.result.response
+        : "";
+    const parsed = extractJsonObject(rawText);
+    if (!parsed) throw new Error("Cloudflare AI tidak mengembalikan JSON yang dapat dibaca.");
+    const quality = payload.task === "storyboard"
+      ? { ok: true, issues: [] }
+      : validateResearchOutput(parsed, payload, researchContext);
+    if (!quality.ok) {
+      throw new Error(`Hasil Cloudflare AI ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`);
+    }
+    return {
+      providerUsed: `cloudflare-workers-ai fallback (${model}; Gemini 429)`,
+      rawText,
+      parsed
+    };
+  } catch (error) {
+    throw new Error(`Gemini API error (429): ${reason}. Fallback Cloudflare Workers AI juga gagal: ${error?.message || String(error)}`);
+  }
+}
+
 function validateResearchOutput(parsed, payload, researchContext) {
   const issues = [];
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -260,6 +298,16 @@ export async function runResearchAndScriptProvider(env, payload) {
 
     if (!res.ok) {
       const errText = await res.text();
+      if (res.status === 429) {
+        return await runCloudflareTextFallback(
+          env,
+          payload,
+          systemPrompt,
+          userPrompt,
+          researchContext,
+          errText.slice(0, 500) || "Batas kuota atau laju permintaan Gemini tercapai."
+        );
+      }
       const detail = res.status === 503
         ? "Gemini sedang tidak tersedia/overload setelah 3 percobaan. Coba lagi beberapa saat."
         : errText.slice(0, 240);

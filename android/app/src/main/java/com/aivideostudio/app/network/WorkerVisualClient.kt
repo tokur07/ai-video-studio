@@ -122,6 +122,9 @@ object WorkerVisualClient {
         sceneNumber: Int,
         visualPrompt: String,
         negativePrompt: String,
+        sceneTitle: String,
+        sceneSummary: String,
+        visualStyle: String,
         aspectRatio: String,
         onResult: (SceneImageGenResult) -> Unit
     ) {
@@ -134,6 +137,9 @@ object WorkerVisualClient {
                 sceneNumber = sceneNumber,
                 visualPrompt = visualPrompt,
                 negativePrompt = negativePrompt,
+                sceneTitle = sceneTitle,
+                sceneSummary = sceneSummary,
+                visualStyle = visualStyle,
                 aspectRatio = aspectRatio
             )
             Log.d(TAG, "generateSceneImageBlocking finished: success=${res.success} msg=${res.message}")
@@ -148,6 +154,9 @@ object WorkerVisualClient {
         sceneNumber: Int,
         visualPrompt: String,
         negativePrompt: String,
+        sceneTitle: String,
+        sceneSummary: String,
+        visualStyle: String,
         aspectRatio: String
     ): SceneImageGenResult {
         val cleanUrl = workerBaseUrl.trim().trimEnd('/')
@@ -173,6 +182,9 @@ object WorkerVisualClient {
             val payload = JSONObject().apply {
                 put("visualPrompt", visualPrompt)
                 put("negativePrompt", negativePrompt)
+                put("sceneTitle", sceneTitle)
+                put("sceneSummary", sceneSummary)
+                put("visualStyle", visualStyle)
                 put("aspectRatio", aspectRatio)
             }
 

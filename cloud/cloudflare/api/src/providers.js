@@ -39,7 +39,7 @@ Kembalikan HANYA JSON valid dengan struktur:
   "summary": "ringkasan yang menyebut entitas/topik secara spesifik",
   "keyPoints": ["poin spesifik dan relevan"],
   "factChecks": [{"claim": "klaim", "status": "Perlu Verifikasi | Umum Dikenal | Catatan", "note": "catatan"}],
-  "references": [{"title": "judul sumber", "sourceType": "jenis sumber", "note": "relevansi sumber"}],
+  "references": [{"title": "judul sumber", "url": "URL sumber yang benar-benar disertakan", "sourceType": "jenis sumber", "note": "relevansi sumber"}],
   "script": {
     "opening": "hook yang langsung menyebut dan memperkenalkan topik sesuai kategori yang benar",
     "body": "isi substantif, runtut, spesifik, dan konsisten dengan identitas topik",
@@ -84,7 +84,7 @@ async function fetchWikipediaResearch(topic) {
         action: "query",
         list: "search",
         srsearch: cleanTopic,
-        srlimit: "3",
+        srlimit: "4",
         format: "json",
         utf8: "1"
       }).toString();
@@ -100,9 +100,8 @@ async function fetchWikipediaResearch(topic) {
       detailUrl.search = new URLSearchParams({
         action: "query",
         prop: "extracts",
-        exintro: "1",
         explaintext: "1",
-        exchars: "2600",
+        exchars: "5000",
         pageids: pageIds.join("|"),
         format: "json"
       }).toString();
@@ -132,7 +131,7 @@ async function fetchWikipediaResearch(topic) {
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 5);
+  }).slice(0, 8);
 }
 
 function buildUserPrompt(payload, researchContext = []) {

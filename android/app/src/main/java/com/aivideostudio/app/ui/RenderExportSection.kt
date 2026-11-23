@@ -83,6 +83,7 @@ fun RenderExportSection(
         LocalVideoRenderer.renderProject(
             context = context,
             projectId = projectId,
+            projectTitle = projectTitle,
             audioEnabled = bundle.audioMixingEnabled,
             subtitlesEnabled = bundle.subtitleBurnInEnabled,
             resolution = bundle.resolution,

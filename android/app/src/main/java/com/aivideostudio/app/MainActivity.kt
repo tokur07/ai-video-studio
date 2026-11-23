@@ -2,6 +2,7 @@ package com.aivideostudio.app
 
 import android.content.Context
 import android.os.Bundle
+import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -78,6 +79,7 @@ private fun VideoStudioApp(context: Context) {
     var projects by remember { mutableStateOf(loadProjects(context)) }
     var selectedProjectId by remember { mutableStateOf<Long?>(null) }
     var pickedImageUri by remember { mutableStateOf<String?>(null) }
+    var pendingDeleteProject by remember { mutableStateOf<VideoProject?>(null) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -100,6 +102,27 @@ private fun VideoStudioApp(context: Context) {
         topic = ""
         status = "Proyek berhasil dibuat dan disimpan di perangkat."
         selectedTab = 1
+    }
+
+    if (pendingDeleteProject != null) {
+        val target = pendingDeleteProject!!
+        AlertDialog(
+            onDismissRequest = { pendingDeleteProject = null },
+            title = { Text("Hapus proyek?") },
+            text = { Text("Proyek yang dipilih dan data lokal yang teridentifikasi akan dihapus dari perangkat. Tindakan ini tidak dapat dibatalkan. Data cloud tidak dihapus.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    projects = projects.filterNot { it.id == target.id }
+                    saveProjects(context, projects)
+                    deleteLocalProjectData(context, target.id)
+                    if (selectedProjectId == target.id) selectedProjectId = null
+                    pendingDeleteProject = null
+                    status = "Proyek dan data lokal yang teridentifikasi telah dihapus."
+                }) { Text("Hapus", color = Color(0xFFB3261E)) }
+            },
+            dismissButton = { TextButton(onClick = { pendingDeleteProject = null }) { Text("Batal") }
+            }
+        )
     }
 
     Scaffold(
@@ -135,7 +158,7 @@ private fun VideoStudioApp(context: Context) {
                     status, projects.size, { createProject() }, { selectedTab = 1 })
                 Tab.PROJECTS -> ProjectsScreen(projects, selectedProjectId, {
                     selectedProjectId = it.id; selectedTab = 2
-                }, { selectedTab = 0 })
+                }, { selectedTab = 0 }, { pendingDeleteProject = it })
                 Tab.EDITOR -> EditorScreen(
                     projects.firstOrNull { it.id == selectedProjectId } ?: projects.firstOrNull(),
                     { selectedTab = 1 },
@@ -260,7 +283,8 @@ private fun StudioTile(icon: String, title: String, description: String, tint: C
 
 @Composable
 private fun ProjectsScreen(
-    projects: List<VideoProject>, selectedProjectId: Long?, onSelect: (VideoProject) -> Unit, onCreate: () -> Unit
+    projects: List<VideoProject>, selectedProjectId: Long?, onSelect: (VideoProject) -> Unit,
+    onCreate: () -> Unit, onDelete: (VideoProject) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SectionHeading("Proyek saya", "Semua ide video yang pernah Anda buat")
@@ -296,6 +320,9 @@ private fun ProjectsScreen(
                             Text(project.title, color = Ink, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text("${project.type}  •  ${project.mode}", color = Muted, style = MaterialTheme.typography.bodySmall)
                             Text("Draft lokal", color = VioletDark, style = MaterialTheme.typography.labelSmall)
+                        }
+                        TextButton(onClick = { onDelete(project) }) {
+                            Text("Hapus", color = Color(0xFFB3261E), style = MaterialTheme.typography.labelLarge)
                         }
                         Text("›", color = Violet, style = MaterialTheme.typography.headlineMedium)
                     }
@@ -500,6 +527,23 @@ private fun SettingRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = Muted, modifier = Modifier.weight(1f))
         Text(value, color = Ink, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+private fun deleteLocalProjectData(context: Context, projectId: Long) {
+    val prefs = context.getSharedPreferences("ai_video_studio", Context.MODE_PRIVATE)
+    val suffix = "_$projectId"
+    val editor = prefs.edit()
+    prefs.all.keys.filter { it == "v09_cloud_$projectId" || it.endsWith(suffix) }.forEach { editor.remove(it) }
+    editor.apply()
+
+    // Delete only app-private files whose filename explicitly contains this project ID.
+    val roots = listOfNotNull(context.filesDir, context.cacheDir, context.getExternalFilesDir(null)).distinct()
+    roots.forEach { root ->
+        root.walkTopDown().filter { it.isFile && it.name.contains(projectId.toString()) }.toList()
+            .forEach { file -> runCatching { file.delete() } }
+        root.walkBottomUp().filter { it.isDirectory && it != root && it.name.contains(projectId.toString()) }.toList()
+            .forEach { dir -> runCatching { dir.delete() } }
     }
 }
 

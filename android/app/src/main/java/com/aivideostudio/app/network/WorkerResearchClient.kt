@@ -70,6 +70,15 @@ object WorkerResearchClient {
                 conn.disconnect()
 
                 val root = JSONObject(rawResponse)
+                if (code !in 200..299 || !root.optBoolean("ok", false)) {
+                    val detail = root.optString("error", rawResponse).take(500)
+                    val localDraft = buildLocalDraft(current)
+                    return localDraft.copy(
+                        providerLabel = "Worker/API gagal (HTTP $code): $detail",
+                        isLiveCloudResult = false,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                }
                 if (code in 200..299 && root.optBoolean("ok", false)) {
                     val hasLive = root.optBoolean("hasLiveAiOutput", false)
                     val providerUsed = root.optString("providerUsed", "Cloudflare Worker")

@@ -39,7 +39,7 @@ object WorkerResearchClient {
                 val conn = (endpoint.openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     connectTimeout = 12000
-                    readTimeout = 45000
+                    readTimeout = 120000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 }
@@ -79,13 +79,18 @@ object WorkerResearchClient {
                     }
                     val localDraft = buildLocalDraft(current)
                     return localDraft.copy(
-                        providerLabel = "Worker Terjangkau ($providerUsed) — Kerangka Lokal",
+                        providerLabel = "AI tidak mengembalikan hasil valid ($providerUsed). Naskah lokal tidak dipakai sebagai hasil AI.",
                         isLiveCloudResult = false,
                         updatedAt = System.currentTimeMillis()
                     )
                 }
-            } catch (_: Exception) {
-                // Fallback transparan ke penyusunan kerangka lokal bila jaringan/worker belum siap
+            } catch (e: Exception) {
+                val localDraft = buildLocalDraft(current)
+                return localDraft.copy(
+                    providerLabel = "Koneksi/AI gagal: ${e.message ?: "kesalahan tidak diketahui"}",
+                    isLiveCloudResult = false,
+                    updatedAt = System.currentTimeMillis()
+                )
             }
         }
 

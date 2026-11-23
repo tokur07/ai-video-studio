@@ -137,7 +137,15 @@ fun StoryboardVisualSection(
     var generatingVideoSceneNum by remember(projectId) { mutableStateOf<Int?>(null) }
     var isGeneratingStoryboard by remember(projectId) { mutableStateOf(false) }
     var statusText by remember(projectId) {
-        mutableStateOf("Manajemen aset, visual prompt & generate gambar AI siap untuk proyek #$projectId.")
+        mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("v05_status_$projectId", null)
+            ?: "Manajemen aset, visual prompt & generate gambar AI siap untuk proyek #$projectId.")
+    }
+
+    fun setStatus(message: String) {
+        statusText = message
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString("v05_status_$projectId", message).apply()
     }
 
     LaunchedEffect(pickedImageUri, activePickScene) {
@@ -280,7 +288,8 @@ fun StoryboardVisualSection(
         }
         if (generatingVideoSceneNum != null || generatingSceneNum != null) return
         generatingVideoSceneNum = asset.sceneNumber
-        statusText = "Mengirim adegan #${asset.sceneNumber} ke Wan 2.2. GPU gratis dapat mengantre dan proses pertama bisa lama..."
+        setStatus("Mengirim adegan #${asset.sceneNumber} ke Wan 2.2. GPU gratis dapat mengantre dan proses pertama bisa lama...")
+        Log.i("AIVideoDiag", "single video start project=$projectId scene=${asset.sceneNumber}")
         WanVideoClient.generateAsync(
             context = context,
             workerBaseUrl = loadWorkerUrl(context),
@@ -291,7 +300,8 @@ fun StoryboardVisualSection(
             negativePrompt = asset.negativePrompt
         ) { result ->
             generatingVideoSceneNum = null
-            statusText = result.message
+            setStatus(result.message.ifBlank { "Adegan #${asset.sceneNumber}: server mengembalikan hasil kosong." })
+            Log.i("AIVideoDiag", "single video result project=$projectId scene=${asset.sceneNumber} success=${result.success} message=${result.message.take(300)}")
             if (result.success && result.localUri.isNotBlank()) {
                 val next = bundle.assets.map { item ->
                     if (item.sceneNumber == asset.sceneNumber) item.copy(localVideoUri = result.localUri) else item
@@ -313,6 +323,7 @@ fun StoryboardVisualSection(
             return
         }
 
+        Log.i("AIVideoDiag", "queue tapped project=$projectId assets=${bundle.assets.size}")
         val failedScenes = mutableListOf<Int>()
         val failureDetails = mutableListOf<String>()
         var successCount = 0
@@ -323,11 +334,13 @@ fun StoryboardVisualSection(
         runNext = { index ->
             if (index >= pending.size) {
                 generatingVideoSceneNum = null
-                statusText = if (failedScenes.isEmpty()) {
+                val finalMessage = if (failedScenes.isEmpty()) {
                     "Selesai. " + successCount + " dari " + pending.size + " video adegan berhasil dibuat dan disimpan."
                 } else {
                     "Antrean selesai: " + successCount + " berhasil, " + failedScenes.size + " gagal (adegan " + failedScenes.joinToString(", ") + "). Video yang berhasil tetap tersimpan. Penyebab: " + failureDetails.joinToString(" | ") + ". Periksa pesan ini untuk diagnosis."
                 }
+                setStatus(finalMessage)
+                Log.i("AIVideoDiag", "queue finished project=$projectId success=$successCount failed=${failedScenes.joinToString(",")} details=${failureDetails.joinToString(" | ")}")
             } else {
                 attemptScene(index, 1)
             }
@@ -336,7 +349,9 @@ fun StoryboardVisualSection(
         attemptScene = { index, attempt ->
             val asset = pending[index]
             generatingVideoSceneNum = asset.sceneNumber
-            statusText = "Antrean Wan 2.2: adegan " + (index + 1) + "/" + pending.size + " (#" + asset.sceneNumber + "), percobaan " + attempt + "/3..."
+            val stageMessage = "Antrean Wan 2.2: adegan " + (index + 1) + "/" + pending.size + " (#" + asset.sceneNumber + "), percobaan " + attempt + "/3. Mengirim permintaan..."
+            setStatus(stageMessage)
+            Log.i("AIVideoDiag", "queue attempt project=$projectId index=$index scene=${asset.sceneNumber} attempt=$attempt")
             WanVideoClient.generateAsync(
                 context = context,
                 workerBaseUrl = loadWorkerUrl(context),
@@ -346,6 +361,7 @@ fun StoryboardVisualSection(
                 prompt = asset.visualPrompt + ". Cinematic 3D animated film, preserve the exact character identity, face, clothing, proportions and scene composition. Natural body movement, clear physical action, subtle cinematic camera movement, smooth temporal consistency.",
                 negativePrompt = asset.negativePrompt
             ) { result ->
+                Log.i("AIVideoDiag", "queue result project=$projectId scene=${asset.sceneNumber} attempt=$attempt success=${result.success} message=${result.message.take(300)}")
                 if (result.success && result.localUri.isNotBlank()) {
                     val nextAssets = bundle.assets.map { item ->
                         if (item.sceneNumber == asset.sceneNumber) item.copy(localVideoUri = result.localUri) else item
@@ -356,12 +372,12 @@ fun StoryboardVisualSection(
                     successCount++
                     mainHandler.postDelayed({ runNext(index + 1) }, 3000)
                 } else if (attempt < 3) {
-                    statusText = "Adegan #" + asset.sceneNumber + " gagal pada percobaan " + attempt + ": " + result.message + " Mencoba ulang..."
+                    setStatus("Adegan #" + asset.sceneNumber + " gagal pada percobaan " + attempt + ": " + result.message + " Mencoba ulang...")
                     mainHandler.postDelayed({ attemptScene(index, attempt + 1) }, 5000)
                 } else {
                     failedScenes.add(asset.sceneNumber)
                     failureDetails.add("#" + asset.sceneNumber + ": " + result.message.ifBlank { "Penyebab tidak diberikan server" }.take(180))
-                    statusText = "Adegan #" + asset.sceneNumber + " gagal setelah 3 percobaan. " + result.message.take(180) + " Melanjutkan ke adegan berikutnya..."
+                    setStatus("Adegan #" + asset.sceneNumber + " gagal setelah 3 percobaan. " + result.message.take(180) + " Melanjutkan ke adegan berikutnya...")
                     mainHandler.postDelayed({ runNext(index + 1) }, 3000)
                 }
             }

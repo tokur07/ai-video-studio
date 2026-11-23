@@ -314,6 +314,7 @@ fun StoryboardVisualSection(
         }
 
         val failedScenes = mutableListOf<Int>()
+        val failureDetails = mutableListOf<String>()
         var successCount = 0
         val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
         lateinit var runNext: (Int) -> Unit
@@ -325,7 +326,7 @@ fun StoryboardVisualSection(
                 statusText = if (failedScenes.isEmpty()) {
                     "Selesai. " + successCount + " dari " + pending.size + " video adegan berhasil dibuat dan disimpan."
                 } else {
-                    "Antrean selesai: " + successCount + " berhasil, " + failedScenes.size + " gagal (adegan " + failedScenes.joinToString(", ") + "). Video yang berhasil tetap tersimpan. Tekan Generate Semua lagi untuk mencoba adegan yang gagal."
+                    "Antrean selesai: " + successCount + " berhasil, " + failedScenes.size + " gagal (adegan " + failedScenes.joinToString(", ") + "). Video yang berhasil tetap tersimpan. Penyebab: " + failureDetails.joinToString(" | ") + ". Periksa pesan ini untuk diagnosis."
                 }
             } else {
                 attemptScene(index, 1)
@@ -359,7 +360,8 @@ fun StoryboardVisualSection(
                     mainHandler.postDelayed({ attemptScene(index, attempt + 1) }, 5000)
                 } else {
                     failedScenes.add(asset.sceneNumber)
-                    statusText = "Adegan #" + asset.sceneNumber + " gagal setelah 3 percobaan. Melanjutkan ke adegan berikutnya..."
+                    failureDetails.add("#" + asset.sceneNumber + ": " + result.message.ifBlank { "Penyebab tidak diberikan server" }.take(180))
+                    statusText = "Adegan #" + asset.sceneNumber + " gagal setelah 3 percobaan. " + result.message.take(180) + " Melanjutkan ke adegan berikutnya..."
                     mainHandler.postDelayed({ runNext(index + 1) }, 3000)
                 }
             }

@@ -235,22 +235,7 @@ export async function runResearchAndScriptProvider(env, payload) {
   const userPrompt = buildUserPrompt(payload, researchContext);
   const model = env.CLOUDFLARE_TEXT_MODEL || "@cf/ibm-granite/granite-4.0-h-micro";
 
-  let result;
-  try {
-    result = await env.AI.run(model, {
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      response_format: { type: "json_object" },
-      max_tokens: 3000,
-      temperature: 0.35
-    });
-  } catch (error) {
-    throw new Error(`Cloudflare Workers AI error (${model}): ${error?.message || String(error)}`);
-  }
-
-  const rawText = typeof result?.response === "string"
+  const readRawText = (result) => typeof result?.response === "string"
     ? result.response
     : typeof result?.result?.response === "string"
       ? result.result.response
@@ -261,16 +246,63 @@ export async function runResearchAndScriptProvider(env, payload) {
           : typeof result?.output_text === "string"
             ? result.output_text
             : "";
-  const parsed = extractJsonObject(rawText);
-  if (!parsed) {
-    throw new Error("Cloudflare Workers AI tidak mengembalikan JSON yang dapat dibaca.");
+
+  const targetWords = Math.max(70, Math.round((Number(payload.targetDurationSec) || 60) / 60 * 125));
+  let messages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt }
+  ];
+  let rawText = "";
+  let parsed = null;
+  let quality = { ok: false, issues: [] };
+
+  // Give the small free-tier model one focused revision opportunity if it returns an undersized or incomplete script.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let result;
+    try {
+      result = await env.AI.run(model, {
+        messages,
+        response_format: { type: "json_object" },
+        max_tokens: 4000,
+        temperature: attempt === 0 ? 0.35 : 0.25
+      });
+    } catch (error) {
+      throw new Error(`Cloudflare Workers AI error (${model}): ${error?.message || String(error)}`);
+    }
+
+    rawText = readRawText(result);
+    parsed = extractJsonObject(rawText);
+    if (!parsed) {
+      if (attempt === 0) {
+        messages = [
+          ...messages,
+          { role: "assistant", content: rawText || "{}" },
+          { role: "user", content: "Perbaiki keluaran sebelumnya. Kembalikan JSON lengkap dan valid sesuai skema. Jangan menghilangkan bagian apa pun." }
+        ];
+        continue;
+      }
+      throw new Error("Cloudflare Workers AI tidak mengembalikan JSON yang dapat dibaca setelah satu kali perbaikan.");
+    }
+
+    quality = payload.task === "storyboard"
+      ? { ok: true, issues: [] }
+      : validateResearchOutput(parsed, payload, researchContext);
+
+    if (quality.ok) break;
+    if (attempt === 0) {
+      messages = [
+        ...messages,
+        { role: "assistant", content: rawText },
+        {
+          role: "user",
+          content: `NASKAH SEBELUMNYA DITOLAK: ${quality.issues.join(" ")}. Tulis ulang dan kembalikan JSON LENGKAP sesuai skema. Untuk target durasi ${payload.targetDurationSec || 60} detik, bagian script.body wajib sekurang-kurangnya ${targetWords} kata bahasa Indonesia (ideal sekitar ${Math.round(targetWords * 1.12)} kata). Tambahkan fakta dan penjelasan spesifik yang relevan dari sumber riset yang tersedia, jangan mengulang kalimat atau mengarang fakta. Opening dan closing tetap lengkap. Pertahankan semua field JSON.`
+        }
+      ];
+    }
   }
 
-  const quality = payload.task === "storyboard"
-    ? { ok: true, issues: [] }
-    : validateResearchOutput(parsed, payload, researchContext);
   if (!quality.ok) {
-    throw new Error(`Hasil Cloudflare Workers AI ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`);
+    throw new Error(`Hasil Cloudflare Workers AI ditolak pemeriksaan kualitas setelah 2 percobaan: ${quality.issues.join(" ")}`);
   }
 
   return {

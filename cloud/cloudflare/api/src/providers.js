@@ -213,7 +213,7 @@ export async function runImageGeneratorProvider(env, payload) {
   const prompt = (payload.visualPrompt || "").trim();
   const sceneTitle = (payload.sceneTitle || "").trim();
   const sceneSummary = (payload.sceneSummary || "").trim();
-  const visualStyle = (payload.visualStyle || "Fotorealistik & Sinematik").trim();
+  const visualStyle = (payload.visualStyle || "Animasi 3D Kartun Sinematik").trim();
   const aspectRatio = (payload.aspectRatio || "9:16").trim();
   const negativePrompt = (payload.negativePrompt || "").trim();
 

@@ -404,7 +404,6 @@ private fun EditorFeature(number: String, title: String, description: String, av
 @Composable
 private fun SettingsScreen(context: Context, projectCount: Int) {
     var workerUrl by remember { mutableStateOf(loadWorkerUrl(context)) }
-    var runnerUrl by remember { mutableStateOf(loadRenderRunnerUrl(context)) }
     var supabaseUrl by remember { mutableStateOf(loadSupabaseUrl(context)) }
     var supabaseAnonKey by remember { mutableStateOf(loadSupabaseAnonKey(context)) }
     var r2BucketInfo by remember { mutableStateOf(loadR2BucketInfo(context)) }
@@ -415,7 +414,7 @@ private fun SettingsScreen(context: Context, projectCount: Int) {
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = SurfaceWhite)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("STATUS APLIKASI", color = Muted, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                SettingRow("Versi aplikasi", "0.2.0 (v0.8–v0.9 render & cloud)")
+                SettingRow("Versi aplikasi", "0.3.0 • Animasi Wan 2.2 & render lokal")
                 HorizontalDivider(color = Color(0xFFEDEAF4))
                 SettingRow("Penyimpanan proyek", "Lokal + Sinkronisasi Cloud")
                 HorizontalDivider(color = Color(0xFFEDEAF4))
@@ -427,8 +426,8 @@ private fun SettingsScreen(context: Context, projectCount: Int) {
 
         Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = SurfaceWhite)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("ENDPOINT WORKER & RENDER RUNNER (OPSIONAL)", fontWeight = FontWeight.Bold, color = VioletDark)
-                Text("Isi URL Cloudflare Worker untuk riset/naskah/gambar AI dan URL runner FFmpeg terpisah untuk ekspor MP4 (jangan menaruh secret/API key di APK).", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text("KONEKSI CLOUD WORKER", fontWeight = FontWeight.Bold, color = VioletDark)
+                Text("Cloudflare Worker digunakan untuk riset, naskah, gambar AI, dan antrean animasi Wan 2.2. Ekspor MP4 dilakukan langsung di perangkat. Jangan menaruh secret/API key provider di APK.", color = Muted, style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     value = workerUrl,
                     onValueChange = { workerUrl = it },
@@ -437,18 +436,9 @@ private fun SettingsScreen(context: Context, projectCount: Int) {
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = runnerUrl,
-                    onValueChange = { runnerUrl = it },
-                    label = { Text("URL FFmpeg Render Runner (v0.8)") },
-                    placeholder = { Text("https://renderer-anda.example.com") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
                 Button(onClick = {
                     saveWorkerUrl(context, workerUrl)
-                    saveRenderRunnerUrl(context, runnerUrl)
-                    savedMsg = "URL Worker & FFmpeg Render Runner disimpan."
+                    savedMsg = "URL Cloudflare Worker disimpan."
                 }) {
                     Text("Simpan Endpoint")
                 }

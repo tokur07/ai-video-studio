@@ -16,7 +16,7 @@ data class SceneVisualAsset(
 data class StoryboardVisualBundle(
     val projectId: Long,
     val aspectRatio: String = "9:16",
-    val visualStyle: String = "Fotorealistik & Sinematik",
+    val visualStyle: String = "Animasi 3D Kartun Sinematik",
     val assets: List<SceneVisualAsset> = emptyList(),
     val updatedAt: Long = System.currentTimeMillis()
 )

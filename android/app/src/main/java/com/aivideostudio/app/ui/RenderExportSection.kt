@@ -85,6 +85,8 @@ fun RenderExportSection(
             projectId = projectId,
             audioEnabled = bundle.audioMixingEnabled,
             subtitlesEnabled = bundle.subtitleBurnInEnabled,
+            resolution = bundle.resolution,
+            aspectRatio = bundle.aspectRatio,
             onStatus = { message, percent ->
                 val next = bundle.copy(
                     renderStatus = message,

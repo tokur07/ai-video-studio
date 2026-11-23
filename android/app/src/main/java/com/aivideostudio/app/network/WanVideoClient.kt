@@ -78,8 +78,14 @@ object WanVideoClient {
                 if (code !in 200..299) {
                     val error = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                     conn.disconnect()
-                    val message = runCatching { JSONObject(error).optString("error") }.getOrNull().orEmpty()
-                    throw IllegalStateException(message.ifBlank { "Worker video gagal (HTTP $code)." })
+                    val message = runCatching {
+                        val obj = JSONObject(error)
+                        listOf("error", "message", "detail").firstNotNullOfOrNull { key ->
+                            val value = obj.opt(key)
+                            if (value == null || value === JSONObject.NULL) null else value.toString().takeIf { it.isNotBlank() && it != "null" }
+                        }
+                    }.getOrNull().orEmpty()
+                    throw IllegalStateException(message.ifBlank { "Worker video gagal (HTTP $code). Respons: ${error.take(500)}" })
                 }
                 val videoUrl = try { readSseVideoUrl(conn) } finally { conn.disconnect() }
                 val videoConn = (URL(videoUrl).openConnection() as HttpURLConnection).apply {
@@ -118,9 +124,12 @@ object WanVideoClient {
                         val rawError = data.toString().ifBlank { "Model video melaporkan error." }
                         val message = runCatching {
                             val obj = JSONObject(rawError)
-                            obj.optString("message").ifBlank { obj.optString("error").ifBlank { rawError } }
+                            listOf("message", "error", "detail").firstNotNullOfOrNull { key ->
+                                val value = obj.opt(key)
+                                if (value == null || value === JSONObject.NULL) null else value.toString().takeIf { it.isNotBlank() && it != "null" }
+                            } ?: rawError
                         }.getOrDefault(rawError)
-                        throw IllegalStateException(message)
+                        throw IllegalStateException(message.ifBlank { "Model video mengirim error tanpa keterangan: ${rawError.take(500)}" })
                     }
                     if (event == "complete" || event == "done" || event == "success") {
                         val raw = data.toString()

@@ -122,9 +122,12 @@ fun AiGeneratorSection(
             writingStyle = activeConfig.narrationStyle,
             targetAudience = activeConfig.targetAudience,
             targetDurationSec = activeConfig.targetDurationSec,
-            revisionInstruction = if (activeConfig.detailLevel == "Mendalam") {
-                "Buat naskah dokumenter mendalam: fakta spesifik, kronologi, tokoh/tempat/tanggal penting, sebab-akibat, dampak, dan konteks sejarah. Jangan hanya membuat pembukaan."
-            } else ""
+            revisionInstruction = buildString {
+                append("Prioritaskan isi substantif, bukan pembukaan panjang. Wajib bahas fakta spesifik yang relevan dengan topik, kronologi atau mekanisme, nama tokoh/tempat/periode/tanggal bila terverifikasi, sebab-akibat, dampak, dan konteks. Isi harus menjadi narasi utuh yang layak dibacakan, bukan kerangka atau daftar arahan.")
+                if (activeConfig.detailLevel == "Mendalam") {
+                    append(" Buat pembahasan dokumenter mendalam dengan 5-8 detail faktual yang berbeda, transisi penceritaan alami, dan kesimpulan berdasarkan fakta.")
+                }
+            }
         )
         WorkerResearchClient.generateResearchAndScriptAsync(
             workerBaseUrl = loadWorkerUrl(context),

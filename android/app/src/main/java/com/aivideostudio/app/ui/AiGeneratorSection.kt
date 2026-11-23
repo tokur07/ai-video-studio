@@ -162,8 +162,8 @@ fun AiGeneratorSection(
                         else -> "Tracking shot memperlihatkan konteks lokasi"
                     },
                     visualPrompt = "${cleanTopic}, ${title}, depict the exact factual moment described in the narration, historically grounded documentary illustration, cinematic composition, consistent visual style, no text",
-                    transition = if (number == 1) "Fade In" else if (number == count) "Fade Out" else "Cut"
-                    ,audioDirection = "Narasi utama jelas dengan ambience dokumenter lembut"
+                    transition = if (number == 1) "Fade In" else if (number == count) "Fade Out" else "Cut",
+                    audioDirection = "Narasi utama jelas dengan ambience dokumenter lembut"
                 )
             }
             config = activeConfig

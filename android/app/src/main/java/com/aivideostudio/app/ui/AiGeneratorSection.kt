@@ -23,6 +23,8 @@ import com.aivideostudio.app.model.GeneratorConfig
 import com.aivideostudio.app.model.ProjectContentBundle
 import com.aivideostudio.app.model.StoryboardScene
 import com.aivideostudio.app.storage.GeneratorStorage
+import com.aivideostudio.app.model.ResearchScriptBundle
+import com.aivideostudio.app.network.WorkerResearchClient
 
 private val CardBg = Color.White
 private val SoftLavender = Color(0xFFF1EDFF)
@@ -76,6 +78,7 @@ fun AiGeneratorSection(
 
     var isEditingScript by remember(projectId) { mutableStateOf(false) }
     var isEditingScenes by remember(projectId) { mutableStateOf(false) }
+    var isGenerating by remember(projectId) { mutableStateOf(false) }
     var statusMessage by remember(projectId) {
         mutableStateOf(
             if (initialBundle.scenes.isNotEmpty() || initialBundle.script.opening.isNotBlank()) {
@@ -109,18 +112,109 @@ fun AiGeneratorSection(
             statusMessage = "Isi topik video terlebih dahulu sebelum generate."
             return
         }
+        if (isGenerating) return
         val activeConfig = config.copy(topic = cleanTopic)
-        val generated = LocalTemplateGenerator.generate(projectId, projectTitle, activeConfig)
-        config = generated.config
-        script = generated.script
-        scenes = generated.scenes
-        isEditingScript = false
-        isEditingScenes = false
-        GeneratorStorage.saveBundle(context, generated)
-        statusMessage = if (isRegenerate) {
-            "Naskah & storyboard berhasil di-regenerate (${LocalTemplateGenerator.GENERATOR_LABEL})."
-        } else {
-            "Naskah & storyboard berhasil dibuat (${LocalTemplateGenerator.GENERATOR_LABEL})."
+        isGenerating = true
+        statusMessage = "AI sedang mencari konteks topik dan menyusun naskah mendalam. Proses dapat memerlukan waktu..."
+        val request = ResearchScriptBundle(
+            projectId = projectId,
+            topic = cleanTopic,
+            videoType = activeConfig.videoType,
+            writingStyle = activeConfig.narrationStyle,
+            targetAudience = activeConfig.targetAudience,
+            targetDurationSec = activeConfig.targetDurationSec,
+            revisionInstruction = if (activeConfig.detailLevel == "Mendalam") {
+                "Buat naskah dokumenter mendalam: fakta spesifik, kronologi, tokoh/tempat/tanggal penting, sebab-akibat, dampak, dan konteks sejarah. Jangan hanya membuat pembukaan."
+            } else ""
+        )
+        WorkerResearchClient.generateResearchAndScriptAsync(
+            workerBaseUrl = loadWorkerUrl(context),
+            current = request
+        ) { research ->
+            isGenerating = false
+            if (!research.isLiveCloudResult || research.body.isBlank()) {
+                statusMessage = "AI cloud belum menghasilkan naskah. Periksa koneksi Worker dan API key. Status: ${research.providerLabel}"
+                return@generateResearchAndScriptAsync
+            }
+
+            val sentenceList = Regex("(?<=[.!?])\\s+").split(research.body)
+                .map { it.trim() }.filter { it.isNotBlank() }
+            val count = activeConfig.sceneCount.coerceIn(1, 8)
+            val perScene = ((sentenceList.size + count - 1) / count).coerceAtLeast(1)
+            val narrationParts = (0 until count).map { index ->
+                sentenceList.drop(index * perScene).take(perScene).joinToString(" ").ifBlank { research.body }
+            }
+            val perDuration = (research.targetDurationSec / count).coerceAtLeast(3)
+            val generatedScenes = narrationParts.mapIndexed { index, narration ->
+                val number = index + 1
+                val point = research.keyPoints.getOrNull(index)
+                val title = point?.take(72) ?: "Pembahasan ${number}: ${cleanTopic}"
+                StoryboardScene(
+                    sceneNumber = number,
+                    title = title,
+                    durationSec = if (number == count) (research.targetDurationSec - perDuration * (count - 1)).coerceAtLeast(3) else perDuration,
+                    narration = narration,
+                    visualDescription = "Visual dokumenter yang menggambarkan secara langsung: ${narration.take(180)}",
+                    cameraDirection = when (index % 4) {
+                        0 -> "Wide establishing shot dengan gerakan kamera perlahan"
+                        1 -> "Medium shot mengikuti aksi utama"
+                        2 -> "Close-up pada detail peristiwa atau objek penting"
+                        else -> "Tracking shot memperlihatkan konteks lokasi"
+                    },
+                    visualPrompt = "${cleanTopic}, ${title}, depict the exact factual moment described in the narration, historically grounded documentary illustration, cinematic composition, consistent visual style, no text",
+                    transition = if (number == 1) "Fade In" else if (number == count) "Fade Out" else "Cut"
+                    ,audioDirection = "Narasi utama jelas dengan ambience dokumenter lembut"
+                )
+            }
+            config = activeConfig
+            script = GeneratedScript(
+                opening = research.opening,
+                body = research.body,
+                closing = research.closing,
+                sceneNarrations = narrationParts,
+                estimatedDurationSec = research.targetDurationSec,
+                storyStructure = research.keyPoints.joinToString(" → "),
+                isManuallyEdited = false,
+                sourceLabel = research.providerLabel
+            )
+            scenes = generatedScenes
+            isEditingScript = false
+            isEditingScenes = false
+            val bundle = ProjectContentBundle(projectId, activeConfig, script, scenes)
+            GeneratorStorage.saveBundle(context, bundle)
+
+            // Share the same AI research result with the dedicated storyboard section.
+            val researchJson = JSONObject().apply {
+                put("projectId", projectId)
+                put("topic", research.topic)
+                put("videoType", research.videoType)
+                put("writingStyle", research.writingStyle)
+                put("targetAudience", research.targetAudience)
+                put("targetDurationSec", research.targetDurationSec)
+                put("summary", research.summary)
+                put("keyPoints", JSONArray().apply { research.keyPoints.forEach { put(it) } })
+                put("factChecks", JSONArray().apply { research.factChecks.forEach { item ->
+                    put(JSONObject().apply { put("claim", item.claim); put("status", item.status); put("note", item.note) })
+                } })
+                put("references", JSONArray().apply { research.references.forEach { item ->
+                    put(JSONObject().apply { put("title", item.title); put("sourceType", item.sourceType); put("note", item.note) })
+                } })
+                put("opening", research.opening)
+                put("body", research.body)
+                put("closing", research.closing)
+                put("revisionInstruction", research.revisionInstruction)
+                put("providerLabel", research.providerLabel)
+                put("isLiveCloudResult", true)
+                put("updatedAt", System.currentTimeMillis())
+            }
+            context.getSharedPreferences("ai_video_studio", Context.MODE_PRIVATE)
+                .edit().putString("v04_research_${projectId}", researchJson.toString()).apply()
+
+            statusMessage = if (isRegenerate) {
+                "Naskah AI berhasil diperbarui dari riset topik (${research.providerLabel})."
+            } else {
+                "Naskah mendalam berhasil dibuat dari riset AI (${research.providerLabel})."
+            }
         }
     }
 
@@ -142,7 +236,7 @@ fun AiGeneratorSection(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            LocalTemplateGenerator.GENERATOR_LABEL,
+                            "AI Riset Topik",
                             color = BadgeMintText,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold
@@ -156,7 +250,7 @@ fun AiGeneratorSection(
                     )
                 }
                 Text(
-                    "Bukan AI generatif cloud — generator dasar lokal ini menyusun struktur naskah & storyboard awal. Koneksi AI cloud akan diaktifkan pada tahap lanjutan.",
+                    "Menggunakan AI cloud dan konteks riset topik. Jika layanan AI gagal, aplikasi tidak akan mengganti hasilnya dengan naskah template lokal.",
                     color = DarkInk,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -288,15 +382,17 @@ fun AiGeneratorSection(
                 ) {
                     Button(
                         onClick = { runGenerate(isRegenerate = false) },
+                        enabled = !isGenerating,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Generate")
+                        Text(if (isGenerating) "Menyusun..." else "Generate AI")
                     }
                     OutlinedButton(
                         onClick = { runGenerate(isRegenerate = true) },
+                        enabled = !isGenerating,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Regenerate")
+                        Text(if (isGenerating) "Memproses..." else "Regenerate AI")
                     }
                 }
             }

@@ -9,6 +9,7 @@ data class SceneVisualAsset(
     val cameraShot: String = "Medium Shot",
     val aspectRatio: String = "9:16",
     val localImageUri: String = "",
+    val localVideoUri: String = "",
     val assetSourceLabel: String = "Prompt Siap Pakai (Belum Ada Gambar)"
 )
 

@@ -78,14 +78,15 @@ object LocalVideoRenderer {
                 val videoItems = assets.map { asset ->
                     val mediaItem = MediaItem.fromUri(Uri.parse(asset.videoUri))
                     val effects = if (subtitlesEnabled && asset.subtitle.isNotBlank()) {
-                        val text = SpannableString("  ${asset.subtitle.trim()}  ")
+                        val subtitleText = wrapSubtitle(asset.subtitle.trim(), if (width <= 720) 26 else 36)
+                        val text = SpannableString("  $subtitleText  ")
                         text.setSpan(ForegroundColorSpan(Color.WHITE), 0, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                         text.setSpan(BackgroundColorSpan(Color.argb(190, 12, 12, 18)), 0, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                         text.setSpan(StyleSpan(Typeface.BOLD), 0, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                         val settings = StaticOverlaySettings.Builder()
                             .setBackgroundFrameAnchor(0f, -0.82f)
                             .setOverlayFrameAnchor(0f, -1f)
-                            .setScale(0.55f, 0.55f)
+                            .setScale(if (width <= 720) 0.38f else 0.55f, if (width <= 720) 0.38f else 0.55f)
                             .build()
                         val overlay = TextOverlay.createStaticTextOverlay(text, settings)
                         Effects(emptyList(), listOf(Presentation.createForWidthAndHeight(width, height, Presentation.LAYOUT_SCALE_TO_FIT), OverlayEffect(listOf(overlay))))
@@ -184,6 +185,22 @@ object LocalVideoRenderer {
         }
     }
 
+
+    private fun wrapSubtitle(value: String, maxChars: Int): String {
+        val words = value.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val lines = mutableListOf<String>()
+        var line = StringBuilder()
+        for (word in words) {
+            if (line.isNotEmpty() && line.length + word.length + 1 > maxChars) {
+                lines.add(line.toString())
+                line = StringBuilder()
+            }
+            if (line.isNotEmpty()) line.append(' ')
+            line.append(word)
+        }
+        if (line.isNotEmpty()) lines.add(line.toString())
+        return lines.take(3).joinToString("\\n").ifBlank { value }
+    }
 
     private fun loadAssets(context: Context, projectId: Long, subtitlesEnabled: Boolean): List<RenderAsset> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

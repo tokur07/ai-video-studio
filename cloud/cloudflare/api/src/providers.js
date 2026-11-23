@@ -48,10 +48,13 @@ ATURAN KETEPATAN CERITA:
 ATURAN PROMPT GAMBAR:
 6. visualPrompt wajib bahasa Inggris, konkret, dan langsung menyebut subjek utama serta kata kerja/aksi yang sedang berlangsung pada kalimat pertama.
 7. Setiap visualPrompt harus menjelaskan: siapa/apa yang terlihat, aksi persisnya, lokasi dan objek penting yang memang ada dalam naskah, latar waktu bila disebut, komposisi kamera, jarak kamera, pencahayaan, dan detail visual yang relevan. Jangan memakai kalimat generik seperti "cinematic scene about the topic".
-8. Terapkan gaya visual yang diminta pengguna secara konsisten. Pertahankan ciri tokoh, pakaian, properti, dan lokasi antaradegan jika naskah menyebutkannya.
-9. Buat satu frame tunggal, bukan kolase, panel komik, poster, montase, atau beberapa kejadian sekaligus. Tanpa teks, subtitle, logo, watermark, atau tulisan terbaca.
-10. negativePrompt berisi artefak visual yang harus dihindari, bukan instruksi cerita baru.
-11. Kembalikan HANYA JSON valid, tepat empat objek, dengan bentuk:
+8. KUNCI KONSISTENSI KARAKTER: jika tokoh yang sama muncul di lebih dari satu adegan, tetapkan satu deskripsi identitas visual yang stabil berdasarkan detail naskah (wajah, rambut, warna kulit, bentuk tubuh, pakaian, dan aksesori yang disebut). Ulangi deskripsi identitas yang sama secara konsisten di setiap visualPrompt tokoh tersebut; jangan mengubah wajah, usia tampak, pakaian, proporsi, atau aksesori antaradegan.
+9. Jika naskah tidak menyebut detail penampilan tokoh fiksi, pilih desain kartun netral yang sederhana satu kali lalu gunakan persis sama di semua adegan. Jangan lakukan ini untuk tokoh sejarah atau orang nyata: detail mereka harus tetap berbasis informasi yang dapat dipertanggungjawabkan.
+10. Jika tidak ada tokoh, jaga konsistensi desain benda, kendaraan, bangunan, dan lingkungan yang berulang.
+11. Terapkan gaya visual yang diminta pengguna secara konsisten, termasuk cinematic 3D cartoon bila diminta.
+12. Buat satu frame tunggal, bukan kolase, panel komik, poster, montase, atau beberapa kejadian sekaligus. Tanpa teks, subtitle, logo, watermark, atau tulisan terbaca.
+13. negativePrompt berisi artefak visual yang harus dihindari, bukan instruksi cerita baru.
+14. Kembalikan HANYA JSON valid, tepat empat objek, dengan bentuk:
 {"scenes":[{"sceneNumber":1,"sceneTitle":"...","sceneSummary":"...","visualPrompt":"...","negativePrompt":"..."}]}
 `.trim();
 

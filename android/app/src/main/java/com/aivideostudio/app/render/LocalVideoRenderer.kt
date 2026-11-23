@@ -199,7 +199,7 @@ object LocalVideoRenderer {
             line.append(word)
         }
         if (line.isNotEmpty()) lines.add(line.toString())
-        return lines.take(3).joinToString("\\n").ifBlank { value }
+        return lines.take(3).joinToString("\n").ifBlank { value }
     }
 
     private fun loadAssets(context: Context, projectId: Long, subtitlesEnabled: Boolean): List<RenderAsset> {

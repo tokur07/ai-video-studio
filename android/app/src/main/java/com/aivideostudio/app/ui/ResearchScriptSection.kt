@@ -176,14 +176,14 @@ fun ResearchScriptSection(
             workerBaseUrl = workerUrl,
             current = state.copy(topic = cleanTopic)
         ) { updated ->
+            isLoading = false
+            if (!updated.isLiveCloudResult || updated.body.isBlank()) {
+                statusText = "AI tidak menghasilkan naskah riset yang valid: ${updated.providerLabel}. Draf sebelumnya dipertahankan; tidak diganti template lokal."
+                return@generateResearchAndScriptAsync
+            }
             state = updated
             saveResearchBundle(context, updated)
-            isLoading = false
-            statusText = if (updated.isLiveCloudResult) {
-                "Selesai via ${updated.providerLabel} dan tersimpan."
-            } else {
-                "Selesai (${updated.providerLabel}) dan tersimpan."
-            }
+            statusText = "Selesai via ${updated.providerLabel}; riset dan naskah tersimpan."
         }
     }
 

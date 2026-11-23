@@ -91,6 +91,8 @@ object WanVideoClient {
                 val bytes = videoConn.inputStream.use { it.readBytes() }
                 videoConn.disconnect()
                 require(bytes.size > 1000) { "File video kosong atau tidak valid." }
+                val mp4Signature = if (bytes.size >= 8) String(bytes, 4, 4, Charsets.US_ASCII) else ""
+                require(mp4Signature == "ftyp") { "Server mengirim respons yang bukan MP4 (Content-Type: ${videoConn.contentType ?: "tidak diketahui"})." }
                 val dir = File(context.filesDir, "scene_videos").apply { mkdirs() }
                 val file = File(dir, "project_${projectId}_scene_${sceneNumber}_${System.currentTimeMillis()}.mp4")
                 file.writeBytes(bytes)
@@ -113,17 +115,26 @@ object WanVideoClient {
                     data.append(line.substringAfter(":").trim())
                 } else if (line.isBlank()) {
                     if (event == "error") {
-                        throw IllegalStateException(data.toString().ifBlank { "Model video melaporkan error." })
+                        val rawError = data.toString().ifBlank { "Model video melaporkan error." }
+                        val message = runCatching {
+                            val obj = JSONObject(rawError)
+                            obj.optString("message").ifBlank { obj.optString("error").ifBlank { rawError } }
+                        }.getOrDefault(rawError)
+                        throw IllegalStateException(message)
                     }
-                    if (event == "complete") {
-                        val payload = JSONArray(data.toString())
-                        // The Space returns both a Video component value and a File download value.
-                        // Accept either Gradio FileData objects or legacy string paths.
-                        for (index in 0 until payload.length()) {
-                            val candidate = findGradioFile(payload.opt(index))
+                    if (event == "complete" || event == "done" || event == "success") {
+                        val raw = data.toString()
+                        val payload = runCatching { JSONArray(raw) }.getOrNull()
+                        if (payload != null) {
+                            for (index in 0 until payload.length()) {
+                                val candidate = findGradioFile(payload.opt(index))
+                                if (candidate != null) return candidate
+                            }
+                        } else {
+                            val candidate = findGradioFile(runCatching { JSONObject(raw) }.getOrNull() ?: raw)
                             if (candidate != null) return candidate
                         }
-                        throw IllegalStateException("Wan 2.2 selesai tetapi tidak mengembalikan file MP4 yang dapat diunduh.")
+                        throw IllegalStateException("Wan 2.2 selesai tetapi format hasil Gradio tidak berisi file MP4 yang dikenali: ${raw.take(300)}")
                     }
                     event = "message"
                     data.setLength(0)
@@ -145,6 +156,7 @@ object WanVideoClient {
             is JSONObject -> {
                 val directUrl = value.optString("url").orEmpty()
                 if (directUrl.startsWith("https://") || directUrl.startsWith("http://")) return directUrl
+                if (directUrl.startsWith("/gradio_api/file=")) return "$SPACE_BASE$directUrl"
                 val path = value.optString("path").orEmpty()
                 if (path.isNotBlank()) return "$SPACE_BASE/gradio_api/file=$path"
                 val video = value.opt("video")

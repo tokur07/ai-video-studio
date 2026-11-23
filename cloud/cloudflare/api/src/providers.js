@@ -98,18 +98,36 @@ export async function runResearchAndScriptProvider(env, payload) {
   if (requested === "gemini" && env.GEMINI_API_KEY) {
     const model = env.GEMINI_MODEL || "gemini-3.8-flash";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: buildUserPrompt(payload) }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.4 }
-      })
+    const requestBody = JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: buildUserPrompt(payload) }] }],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.4 }
     });
+
+    // Gemini 503 is usually temporary capacity overload. Retry at most twice
+    // with exponential backoff rather than failing the whole script request immediately.
+    let res;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody
+      });
+      if (res.status !== 503 || attempt === 2) break;
+
+      const retryAfter = Number(res.headers.get("Retry-After"));
+      const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(retryAfter * 1000, 10000)
+        : 1000 * (2 ** attempt);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Gemini API error (${res.status}): ${errText.slice(0, 240)}`);
+      const detail = res.status === 503
+        ? "Gemini sedang tidak tersedia/overload setelah 3 percobaan. Coba lagi beberapa saat."
+        : errText.slice(0, 240);
+      throw new Error(`Gemini API error (${res.status}): ${detail}`);
     }
     const data = await res.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";

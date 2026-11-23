@@ -31,10 +31,17 @@ object WanVideoClient {
         imageUri: String,
         prompt: String,
         negativePrompt: String,
+        onProgress: (String) -> Unit = {},
         onResult: (SceneVideoResult) -> Unit
     ) {
         Thread {
+            var currentStage = "Memulai proses video."
+            fun progress(message: String) {
+                currentStage = message
+                mainHandler.post { onProgress(message) }
+            }
             val result = runCatching {
+                progress("Memeriksa gambar adegan dan konfigurasi layanan...")
                 require(imageUri.isNotBlank()) { "Gambar adegan belum tersedia." }
                 require(prompt.isNotBlank()) { "Prompt gerakan masih kosong." }
                 val clean = workerBaseUrl.trim().trimEnd('/')
@@ -45,6 +52,7 @@ object WanVideoClient {
                 val imageBytes = context.contentResolver.openInputStream(imageContentUri)?.use { it.readBytes() }
                     ?: throw IllegalStateException("File gambar adegan tidak dapat dibaca.")
                 require(imageBytes.size <= 8 * 1024 * 1024) { "Gambar maksimal 8 MB untuk layanan GPU gratis." }
+                progress("Gambar berhasil dibaca (${imageBytes.size / 1024} KB). Menghubungi Cloudflare Worker...")
                 val boundary = "----AIVideoStudio${System.currentTimeMillis()}"
                 val conn = (URL("$clean/v1/generate-video").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
@@ -54,6 +62,7 @@ object WanVideoClient {
                     setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
                     setRequestProperty("Accept", "text/event-stream")
                 }
+                progress("Mengirim gambar dan prompt ke Cloudflare Worker...")
                 conn.outputStream.use { out ->
                     fun field(name: String, value: String) {
                         out.write("--$boundary\r\n".toByteArray())
@@ -75,6 +84,7 @@ object WanVideoClient {
                     out.flush()
                 }
                 val code = conn.responseCode
+                progress("Cloudflare Worker merespons HTTP $code. Memeriksa antrean video...")
                 if (code !in 200..299) {
                     val error = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                     conn.disconnect()
@@ -87,23 +97,30 @@ object WanVideoClient {
                     }.getOrNull().orEmpty()
                     throw IllegalStateException(message.ifBlank { "Worker video gagal (HTTP $code). Respons: ${error.take(500)}" })
                 }
+                progress("Permintaan diterima Worker. Menunggu hasil GPU Wan 2.2...")
                 val videoUrl = try { readSseVideoUrl(conn) } finally { conn.disconnect() }
+                progress("Video selesai diproses. Mengunduh file MP4...")
                 val videoConn = (URL(videoUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 30000
                     readTimeout = 120000
                 }
                 val videoCode = videoConn.responseCode
                 if (videoCode !in 200..299) throw IllegalStateException("Unduhan MP4 gagal (HTTP $videoCode).")
+                val contentType = videoConn.contentType ?: "tidak diketahui"
                 val bytes = videoConn.inputStream.use { it.readBytes() }
                 videoConn.disconnect()
-                require(bytes.size > 1000) { "File video kosong atau tidak valid." }
+                require(bytes.size > 1000) { "File video kosong atau tidak valid (ukuran ${bytes.size} byte)." }
                 val mp4Signature = if (bytes.size >= 8) String(bytes, 4, 4, Charsets.US_ASCII) else ""
-                require(mp4Signature == "ftyp") { "Server mengirim respons yang bukan MP4 (Content-Type: ${videoConn.contentType ?: "tidak diketahui"})." }
+                require(mp4Signature == "ftyp") { "Server mengirim respons yang bukan MP4 (Content-Type: $contentType)." }
                 val dir = File(context.filesDir, "scene_videos").apply { mkdirs() }
                 val file = File(dir, "project_${projectId}_scene_${sceneNumber}_${System.currentTimeMillis()}.mp4")
                 file.writeBytes(bytes)
+                progress("Video adegan #$sceneNumber berhasil diunduh dan disimpan.")
                 SceneVideoResult(true, Uri.fromFile(file).toString(), "Video adegan #$sceneNumber selesai dibuat dan disimpan.")
-            }.getOrElse { SceneVideoResult(false, message = it.message ?: "Gagal membuat video.") }
+            }.getOrElse {
+                val detail = it.message?.takeIf(String::isNotBlank) ?: "Tidak ada pesan dari server."
+                SceneVideoResult(false, message = "$currentStage Gagal: ${it.javaClass.simpleName}: $detail")
+            }
             mainHandler.post { onResult(result) }
         }.start()
     }

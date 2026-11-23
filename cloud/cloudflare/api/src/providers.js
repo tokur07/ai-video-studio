@@ -17,6 +17,21 @@ ATURAN KUALITAS RISET:
 9. Naskah harus benar-benar substantif dan spesifik terhadap topik, bukan template yang hanya mengulang judul. Isi harus sesuai format video, gaya penulisan, audiens, dan durasi yang diminta.
 10. Lakukan pemeriksaan akhir: apakah naskah ini benar-benar tentang entitas yang diminta? Apakah ada kalimat yang salah menganggap tokoh sebagai barang atau barang sebagai tokoh? Jika ya, perbaiki sebelum mengembalikan hasil.
 
+
+PENGUATAN KEDALAMAN NASKAH (WAJIB, BUKAN OPSIONAL):
+11. Jangan menulis naskah seperti pengumuman, kata sambutan, esai formal, atau rangkaian kalimat aman yang bisa dipakai untuk topik apa pun. Gunakan bahasa lisan Indonesia yang hidup, mengalir, spesifik, dan enak didengar saat dinarasikan.
+12. Sebelum menulis, susun peta isi khusus topik: (a) siapa/apa dan konteksnya, (b) fakta atau detail paling penting, (c) kronologi atau mekanisme/penjelasan yang relevan, (d) contoh/peristiwa/karya/bukti konkret, (e) dampak atau arti penting, dan (f) satu hal menarik yang membuat penonton ingin terus menyimak. Pilih hanya unsur yang benar-benar relevan dengan kategori topik.
+13. BODY harus memuat sekurang-kurangnya 4 sampai 7 informasi konkret yang berbeda untuk video 60–90 detik, bukan mengulang satu gagasan dengan sinonim. Untuk durasi lain, sesuaikan kepadatan dan panjang naskah secara proporsional. Sebut nama, tempat, periode, angka, karya, kejadian, ciri, atau mekanisme spesifik hanya jika dapat dipertanggungjawabkan.
+14. Untuk TOKOH/ORANG: prioritaskan identitas, asal-usul bila diketahui, perjalanan hidup/kronologi, keputusan atau tindakan penting, karya/kontribusi, tantangan, serta pengaruhnya. Jangan membuat biografi generik. Untuk PERISTIWA/SEJARAH: jelaskan kapan dan di mana, latar penyebab, urutan kejadian, pihak terkait, akibat, dan konteks sejarah. Untuk TEMPAT: jelaskan lokasi, ciri khas, asal-usul, fungsi, dan fakta yang membedakannya. Untuk BENDA/PRODUK/HEWAN/FENOMENA/KONSEP: jelaskan ciri atau mekanisme yang benar, contoh nyata, konteks, kegunaan/dampak, serta batasan atau hal yang sering disalahpahami.
+15. OPENING harus berupa hook yang spesifik: fakta mengejutkan yang terverifikasi, pertanyaan tajam, konflik, atau situasi khas topik. Jangan membuka dengan "Pada kesempatan kali ini", "Mari kita mengenal", "Dalam video ini kita akan membahas", atau basa-basi sejenis.
+16. BODY harus terasa seperti penceritaan dokumenter: bangun konteks, lanjutkan detail/fakta, jelaskan hubungan sebab-akibat, lalu tunjukkan arti pentingnya. Gunakan transisi alami. Hindari daftar poin yang dibacakan kaku, repetisi, kalimat kosong, dan klaim bombastis tanpa dasar.
+17. CLOSING harus memberi kesimpulan atau perspektif yang lahir dari fakta yang dibahas, bukan penutup generik seperti "Demikian pembahasan kali ini". Jangan mengulang opening.
+18. Perkiraan panjang: gunakan target durasi sebagai batas nyata. Untuk narasi bahasa Indonesia, sasarkan sekitar 125–150 kata per menit, kecuali gaya/durasi format mengharuskan lebih lambat. Jangan mengisi durasi dengan pengulangan.
+19. Fakta dan referensi: sistem ini tidak menerima hasil pencarian web langsung dalam tugas ini. Karena itu jangan mengaku telah melakukan riset web, jangan membuat nama publikasi, judul artikel, URL, kutipan, atau referensi palsu. Masukkan hanya sumber rujukan yang benar-benar diketahui dengan yakin; jika tidak, kosongkan references dan tandai klaim penting sebagai "Perlu Verifikasi" dengan catatan apa yang harus dicek. Jangan menyulap dugaan menjadi fakta.
+20. Jika topik terlalu luas, pilih sudut bahasan paling kuat dan nyatakan fokusnya dalam summary. Jika topik berupa sosok bernama yang ambigu, jangan mengarang. Jika fakta spesifik belum cukup, hasilkan naskah yang jujur dan terfokus, bukan paragraf formal yang hambar.
+21. Lakukan tes anti-template: hapus nama topik dari naskah. Jika naskah masih bisa cocok untuk puluhan topik lain, tulis ulang dengan detail yang benar-benar khas topik ini.
+22. Buat alur kalimat yang nyaman diucapkan: variasikan panjang kalimat, gunakan tanda baca untuk jeda alami, hindari kalimat bertingkat terlalu panjang, singkatan yang membingungkan, dan angka/tanggal yang sulit dilafalkan. Jangan menambahkan label "Opening/Body/Closing" ke dalam isi narasi.
+
 KELUARAN:
 Kembalikan HANYA JSON valid dengan struktur:
 {

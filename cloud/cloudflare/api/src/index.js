@@ -19,16 +19,13 @@ export default {
 
     let response;
     if (url.pathname === "/health" && request.method === "GET") {
-      const configuredProviders = SUPPORTED_PROVIDERS.filter((name) => {
-        if (name === "gemini") return Boolean(env.GEMINI_API_KEY);
-        if (name === "groq") return Boolean(env.GROQ_API_KEY);
-        if (name === "openrouter") return Boolean(env.OPENROUTER_API_KEY);
-        return false;
-      });
+      const configuredProviders = env.AI && typeof env.AI.run === "function"
+        ? SUPPORTED_PROVIDERS
+        : [];
       response = Response.json({
         ok: true,
         service: "ai-video-studio-api",
-        version: "0.5.0-visual-ready",
+        version: "0.6.0-cloudflare-ai-only",
         configuredProviders,
         imageProviderReady: Boolean(env.AI || env.HF_TOKEN)
       });

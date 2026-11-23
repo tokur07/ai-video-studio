@@ -312,36 +312,55 @@ fun StoryboardVisualSection(
             statusText = "Semua adegan yang memiliki gambar sudah mempunyai video."
             return
         }
+
+        val failedScenes = mutableListOf<Int>()
+        var successCount = 0
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
         lateinit var runNext: (Int) -> Unit
+        lateinit var attemptScene: (Int, Int) -> Unit
+
         runNext = { index ->
             if (index >= pending.size) {
                 generatingVideoSceneNum = null
-                statusText = "Selesai. ${pending.size} video adegan berhasil dibuat dan disimpan."
+                statusText = if (failedScenes.isEmpty()) {
+                    "Selesai. " + successCount + " dari " + pending.size + " video adegan berhasil dibuat dan disimpan."
+                } else {
+                    "Antrean selesai: " + successCount + " berhasil, " + failedScenes.size + " gagal (adegan " + failedScenes.joinToString(", ") + "). Video yang berhasil tetap tersimpan. Tekan Generate Semua lagi untuk mencoba adegan yang gagal."
+                }
             } else {
-                val asset = pending[index]
-                generatingVideoSceneNum = asset.sceneNumber
-                statusText = "Antrean gratis Wan 2.2: adegan ${index + 1}/${pending.size} (adegan #${asset.sceneNumber})."
-                WanVideoClient.generateAsync(
-                    context = context,
-                    workerBaseUrl = loadWorkerUrl(context),
-                    projectId = projectId,
-                    sceneNumber = asset.sceneNumber,
-                    imageUri = asset.localImageUri,
-                    prompt = asset.visualPrompt + ". Cinematic 3D animated film, preserve the exact character identity, face, clothing, proportions and scene composition. Natural body movement, clear physical action, subtle cinematic camera movement, smooth temporal consistency.",
-                    negativePrompt = asset.negativePrompt
-                ) { result ->
-                    if (!result.success || result.localUri.isBlank()) {
-                        generatingVideoSceneNum = null
-                        statusText = "Antrean berhenti pada adegan #${asset.sceneNumber}: ${result.message} Video sebelumnya tetap tersimpan; tekan Generate Semua lagi untuk melanjutkan."
-                    } else {
-                        val nextAssets = bundle.assets.map { item ->
-                            if (item.sceneNumber == asset.sceneNumber) item.copy(localVideoUri = result.localUri) else item
-                        }
-                        val updated = bundle.copy(assets = nextAssets, updatedAt = System.currentTimeMillis())
-                        bundle = updated
-                        saveVisualBundle(context, updated)
-                        runNext(index + 1)
+                attemptScene(index, 1)
+            }
+        }
+
+        attemptScene = { index, attempt ->
+            val asset = pending[index]
+            generatingVideoSceneNum = asset.sceneNumber
+            statusText = "Antrean Wan 2.2: adegan " + (index + 1) + "/" + pending.size + " (#" + asset.sceneNumber + "), percobaan " + attempt + "/3..."
+            WanVideoClient.generateAsync(
+                context = context,
+                workerBaseUrl = loadWorkerUrl(context),
+                projectId = projectId,
+                sceneNumber = asset.sceneNumber,
+                imageUri = asset.localImageUri,
+                prompt = asset.visualPrompt + ". Cinematic 3D animated film, preserve the exact character identity, face, clothing, proportions and scene composition. Natural body movement, clear physical action, subtle cinematic camera movement, smooth temporal consistency.",
+                negativePrompt = asset.negativePrompt
+            ) { result ->
+                if (result.success && result.localUri.isNotBlank()) {
+                    val nextAssets = bundle.assets.map { item ->
+                        if (item.sceneNumber == asset.sceneNumber) item.copy(localVideoUri = result.localUri) else item
                     }
+                    val updated = bundle.copy(assets = nextAssets, updatedAt = System.currentTimeMillis())
+                    bundle = updated
+                    saveVisualBundle(context, updated)
+                    successCount++
+                    mainHandler.postDelayed({ runNext(index + 1) }, 3000)
+                } else if (attempt < 3) {
+                    statusText = "Adegan #" + asset.sceneNumber + " gagal pada percobaan " + attempt + ": " + result.message + " Mencoba ulang..."
+                    mainHandler.postDelayed({ attemptScene(index, attempt + 1) }, 5000)
+                } else {
+                    failedScenes.add(asset.sceneNumber)
+                    statusText = "Adegan #" + asset.sceneNumber + " gagal setelah 3 percobaan. Melanjutkan ke adegan berikutnya..."
+                    mainHandler.postDelayed({ runNext(index + 1) }, 3000)
                 }
             }
         }

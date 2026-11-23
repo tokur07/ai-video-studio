@@ -183,7 +183,7 @@ function validateResearchOutput(parsed, payload, researchContext) {
   const keyPoints = Array.isArray(parsed.keyPoints) ? parsed.keyPoints.filter(v => typeof v === "string" && v.trim()) : [];
   const factChecks = Array.isArray(parsed.factChecks) ? parsed.factChecks.filter(v => v && typeof v.claim === "string" && v.claim.trim()) : [];
   const references = Array.isArray(parsed.references) ? parsed.references : [];
-  const wordCount = body.split(/\\s+/).filter(Boolean).length;
+  const wordCount = body.split(/\s+/).filter(Boolean).length;
   const targetWords = Math.max(45, Math.round((Number(payload.targetDurationSec) || 60) / 60 * 95));
 
   if (!String(parsed.topicType || "").trim()) issues.push("Jenis topik tidak ditentukan.");
@@ -195,7 +195,7 @@ function validateResearchOutput(parsed, payload, researchContext) {
   if (closing.length < 20) issues.push("Penutup naskah kosong atau terlalu pendek.");
 
   const topicTokens = topic.toLowerCase().normalize("NFKD")
-    .replace(/[^a-z0-9\\s]/g, " ").split(/\\s+/)
+    .replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
     .filter(token => token.length >= 3 && !["tentang", "sejarah", "sosok", "tokoh", "profil", "biografi", "video"].includes(token));
   const combined = [summary, ...keyPoints, opening, body, closing].join(" ").toLowerCase();
   if (topicTokens.length && !topicTokens.some(token => combined.includes(token))) {

@@ -1,4 +1,4 @@
-export const SUPPORTED_PROVIDERS = ["gemini", "groq", "openrouter"];
+export const SUPPORTED_PROVIDERS = ["cloudflare-workers-ai"];
 
 const RESEARCH_SCRIPT_SYSTEM_PROMPT = `
 Anda adalah peneliti dan penulis naskah video profesional berbahasa Indonesia. Prioritas tertinggi: pahami IDENTITAS TOPIK secara benar sebelum menulis. Jangan pernah mengubah topik menjadi jenis entitas lain.
@@ -169,44 +169,6 @@ function extractJsonObject(rawText) {
   }
 }
 
-async function runCloudflareTextFallback(env, payload, systemPrompt, userPrompt, researchContext, reason) {
-  if (!env.AI || typeof env.AI.run !== "function") {
-    throw new Error(`Gemini API error (429): ${reason}. Cloudflare Workers AI fallback tidak tersedia pada binding AI.`);
-  }
-  const model = env.CLOUDFLARE_TEXT_MODEL || "@cf/meta/llama-3.1-8b-instruct";
-  try {
-    const result = await env.AI.run(model, {
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      response_format: { type: "json_object" },
-      max_tokens: 3000,
-      temperature: 0.35
-    });
-    const rawText = typeof result?.response === "string"
-      ? result.response
-      : typeof result?.result?.response === "string"
-        ? result.result.response
-        : "";
-    const parsed = extractJsonObject(rawText);
-    if (!parsed) throw new Error("Cloudflare AI tidak mengembalikan JSON yang dapat dibaca.");
-    const quality = payload.task === "storyboard"
-      ? { ok: true, issues: [] }
-      : validateResearchOutput(parsed, payload, researchContext);
-    if (!quality.ok) {
-      throw new Error(`Hasil Cloudflare AI ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`);
-    }
-    return {
-      providerUsed: `cloudflare-workers-ai fallback (${model}; Gemini 429)`,
-      rawText,
-      parsed
-    };
-  } catch (error) {
-    throw new Error(`Gemini API error (429): ${reason}. Fallback Cloudflare Workers AI juga gagal: ${error?.message || String(error)}`);
-  }
-}
-
 function validateResearchOutput(parsed, payload, researchContext) {
   const issues = [];
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -262,139 +224,53 @@ function validateResearchOutput(parsed, payload, researchContext) {
 }
 
 export async function runResearchAndScriptProvider(env, payload) {
+  if (!env.AI || typeof env.AI.run !== "function") {
+    throw new Error("Cloudflare Workers AI belum tersedia. Periksa binding AI pada Worker.");
+  }
+
   const systemPrompt = payload.task === "storyboard"
     ? STORYBOARD_SYSTEM_PROMPT
     : RESEARCH_SCRIPT_SYSTEM_PROMPT;
-  const requested = (payload.provider || env.DEFAULT_AI_PROVIDER || "gemini").toLowerCase();
   const researchContext = payload.task === "storyboard" ? [] : await fetchWikipediaResearch(payload.topic);
   const userPrompt = buildUserPrompt(payload, researchContext);
+  const model = env.CLOUDFLARE_TEXT_MODEL || "@cf/meta/llama-3.1-8b-instruct";
 
-  if (requested === "gemini" && env.GEMINI_API_KEY) {
-    const model = env.GEMINI_MODEL || "gemini-3.8-flash";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
-    const requestBody = JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      generationConfig: { responseMimeType: "application/json", temperature: 0.4 }
+  let result;
+  try {
+    result = await env.AI.run(model, {
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 3000,
+      temperature: 0.35
     });
-
-    // Gemini 503 is usually temporary capacity overload. Retry at most twice
-    // with exponential backoff rather than failing the whole script request immediately.
-    let res;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: requestBody
-      });
-      if (res.status !== 503 || attempt === 2) break;
-
-      const retryAfter = Number(res.headers.get("Retry-After"));
-      const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
-        ? Math.min(retryAfter * 1000, 10000)
-        : 1000 * (2 ** attempt);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-
-    if (!res.ok) {
-      const errText = await res.text();
-      if (res.status === 429) {
-        return await runCloudflareTextFallback(
-          env,
-          payload,
-          systemPrompt,
-          userPrompt,
-          researchContext,
-          errText.slice(0, 500) || "Batas kuota atau laju permintaan Gemini tercapai."
-        );
-      }
-      const detail = res.status === 503
-        ? "Gemini sedang tidak tersedia/overload setelah 3 percobaan. Coba lagi beberapa saat."
-        : errText.slice(0, 240);
-      throw new Error(`Gemini API error (${res.status}): ${detail}`);
-    }
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const parsed = extractJsonObject(text);
-    const quality = payload.task === "storyboard" ? { ok: true, issues: [] } : validateResearchOutput(parsed, payload, researchContext);
-    return {
-      providerUsed: quality.ok ? `gemini (${model})` : `gemini (${model}) ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`,
-      rawText: text,
-      parsed: quality.ok ? parsed : null
-    };
+  } catch (error) {
+    throw new Error(`Cloudflare Workers AI error (${model}): ${error?.message || String(error)}`);
   }
 
-  if (requested === "groq" && env.GROQ_API_KEY) {
-    const model = env.GROQ_MODEL || "llama-3.3-70b-versatile";
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${env.GROQ_API_KEY}`
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.4,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: buildUserPrompt(payload, researchContext) }
-        ]
-      })
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Groq API error (${res.status}): ${errText.slice(0, 240)}`);
-    }
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content || "";
-    const parsed = extractJsonObject(text);
-    const quality = payload.task === "storyboard" ? { ok: true, issues: [] } : validateResearchOutput(parsed, payload, researchContext);
-    return {
-      providerUsed: quality.ok ? `groq (${model})` : `groq (${model}) ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`,
-      rawText: text,
-      parsed: quality.ok ? parsed : null
-    };
+  const rawText = typeof result?.response === "string"
+    ? result.response
+    : typeof result?.result?.response === "string"
+      ? result.result.response
+      : "";
+  const parsed = extractJsonObject(rawText);
+  if (!parsed) {
+    throw new Error("Cloudflare Workers AI tidak mengembalikan JSON yang dapat dibaca.");
   }
 
-  if (requested === "openrouter" && env.OPENROUTER_API_KEY) {
-    const model = env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free";
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "https://github.com/tokur07/ai-video-studio",
-        "X-Title": "AI Video Studio"
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.4,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: buildUserPrompt(payload, researchContext) }
-        ]
-      })
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`OpenRouter API error (${res.status}): ${errText.slice(0, 240)}`);
-    }
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content || "";
-    const parsed = extractJsonObject(text);
-    const quality = payload.task === "storyboard" ? { ok: true, issues: [] } : validateResearchOutput(parsed, payload, researchContext);
-    return {
-      providerUsed: quality.ok ? `openrouter (${model})` : `openrouter (${model}) ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`,
-      rawText: text,
-      parsed: quality.ok ? parsed : null
-    };
+  const quality = payload.task === "storyboard"
+    ? { ok: true, issues: [] }
+    : validateResearchOutput(parsed, payload, researchContext);
+  if (!quality.ok) {
+    throw new Error(`Hasil Cloudflare Workers AI ditolak pemeriksaan kualitas: ${quality.issues.join(" ")}`);
   }
 
   return {
-    providerUsed: "none (server secret not configured)",
-    rawText: "",
-    parsed: null
+    providerUsed: `cloudflare-workers-ai (${model})`,
+    rawText,
+    parsed
   };
 }
 

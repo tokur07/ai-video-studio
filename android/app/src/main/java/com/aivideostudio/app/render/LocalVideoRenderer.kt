@@ -11,7 +11,7 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import androidx.media3.common.Effects
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.OverlayEffect
@@ -21,6 +21,7 @@ import androidx.media3.effect.TextOverlay
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
+import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
@@ -98,13 +99,13 @@ object LocalVideoRenderer {
                         .setEffects(effects)
                         .build()
                 }
-                val videoSequence = EditedMediaItemSequence.withVideoFrom(videoItems)
+                val videoSequence = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO)).addItems(videoItems).build()
                 val sequences = mutableListOf(videoSequence)
                 if (audioEnabled && audioFile != null && audioFile.exists() && audioFile.length() > 1000) {
                     val audioItem = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(audioFile)))
                         .setRemoveVideo(true)
                         .build()
-                    sequences.add(EditedMediaItemSequence.withAudioFrom(listOf(audioItem)))
+                    sequences.add(EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO)).addItem(audioItem).build())
                 }
                 val composition = Composition.Builder(sequences).build()
                 onStatus("Merender MP4 di perangkat. Jangan tutup aplikasi sampai selesai...", 35)
